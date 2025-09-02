@@ -1,0 +1,76 @@
+# Camp
+
+> Your all-in-one development environment manager
+
+[![Go Version](https://img.shields.io/badge/go-1.24.4-blue.svg)](https://golang.org/)
+[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
+
+## Description
+
+Camp is a command-line tool designed to help developers manage their isolated development environments. Built with Go, Camp provides essential system information and environment management utilities.
+
+Camp relies on existing tools like [direnv](https://direnv.net/) and [devbox](https://www.jetify.com/devbox) for environment setup and management.
+
+## Features
+
+### Current Features
+- **System Information**: Get detailed information about your system architecture and operating system
+- TBD
+
+### Planned Features
+- Environment isolation using direnv and devbox
+- Development workflow automation
+- Project-specific environment configuration
+- Environment configuration remote sharing
+
+## Installation
+
+### Prerequisites
+- Go 1.24.4 or later
+
+### Build from Source
+```bash
+git clone https://github.com/tbueno/camp
+cd camp
+go build -o camp
+```
+
+### Install
+```bash
+go install
+```
+
+## Usage
+
+### Command Help
+
+Get help for any command:
+```bash
+camp --help
+camp env --help
+```
+
+## Development
+
+### Testing
+
+Run the test suite:
+```bash
+go test ./...
+```
+## License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+
+## Roadmap
+
+Camp is in active development. Future releases will include:
+- Container-based environment isolation
+- Configuration management
+- Integration with popular development tools
+- Cross-platform environment synchronization
+- Plugin system for extensibility
+
+---
+
+*Built with ❤️ using Go and Cobra*

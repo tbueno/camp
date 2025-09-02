@@ -19,3 +19,9 @@ type User struct {
 	Name string
 	// Future fields: ID, Groups, Shell, etc.
 }
+
+// EnvVar represents an environment variable
+type EnvVar struct {
+	Name  string
+	Value string
+}
