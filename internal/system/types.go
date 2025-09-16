@@ -25,3 +25,14 @@ type EnvVar struct {
 	Name  string
 	Value string
 }
+
+// Application represents an application to be installed
+type Application struct {
+	Name           string
+	InstallCommand string
+}
+
+// BootstrapConfig represents the internal bootstrap configuration
+type BootstrapConfig struct {
+	Applications []Application
+}
