@@ -28,14 +28,30 @@ func TestGetDefaultBootstrapConfig(t *testing.T) {
 	}
 
 	foundDirenv := false
+	foundNix := false
+	foundDevbox := false
 	for _, app := range config.Applications {
 		if app.Name == "direnv" {
 			foundDirenv = true
+		}
+		if app.Name == "nix" {
+			foundNix = true
+		}
+		if app.Name == "devbox" {
+			foundDevbox = true
 		}
 	}
 
 	if !foundDirenv {
 		t.Error("Expected direnv to be in default applications")
+	}
+
+	if !foundNix {
+		t.Error("Expected nix to be in default applications")
+	}
+
+	if !foundDevbox {
+		t.Error("Expected devbox to be in default applications")
 	}
 }
 
@@ -241,5 +257,53 @@ func TestExecuteInstallCommand_FailingCommand(t *testing.T) {
 
 	if err.Error() == "" {
 		t.Error("Expected non-empty error message")
+	}
+}
+
+func TestIsCommandAvailable_ExistingCommand(t *testing.T) {
+	// Test with a command that should exist on all systems
+	if !isCommandAvailable("sh") {
+		t.Error("Expected 'sh' to be available in PATH")
+	}
+}
+
+func TestIsCommandAvailable_NonExistingCommand(t *testing.T) {
+	// Test with a command that definitely doesn't exist
+	if isCommandAvailable("this-command-definitely-does-not-exist-12345") {
+		t.Error("Expected non-existing command to return false")
+	}
+}
+
+func TestRunBootstrap_SkipsAlreadyInstalledCommands(t *testing.T) {
+	// Use 'echo' as a command that's guaranteed to exist
+	config := &BootstrapConfig{
+		Applications: []Application{
+			{Name: "echo", InstallCommand: "echo 'should not run'"},
+			{Name: "this-does-not-exist-xyz", InstallCommand: "echo 'this would install'"},
+		},
+	}
+
+	var output bytes.Buffer
+	err := RunBootstrap(config, &output, true)
+
+	if err != nil {
+		t.Fatalf("RunBootstrap failed: %v", err)
+	}
+
+	outputStr := output.String()
+
+	// Should skip echo because it exists
+	if !strings.Contains(outputStr, "echo is already installed, skipping") {
+		t.Error("Expected message about skipping already installed command")
+	}
+
+	// Should attempt to install the non-existing command
+	if !strings.Contains(outputStr, "this-does-not-exist-xyz") {
+		t.Error("Expected non-existing command to be processed")
+	}
+
+	// Should not actually run the install command for echo
+	if strings.Contains(outputStr, "should not run") {
+		t.Error("Should not have executed install command for already installed application")
 	}
 }
