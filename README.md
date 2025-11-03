@@ -1,4 +1,4 @@
-# Camp
+# ⛺ CAMP CLI
 
 > Your all-in-one development environment manager
 
