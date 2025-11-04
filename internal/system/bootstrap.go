@@ -1,8 +1,10 @@
 package system
 
 import (
+	"camp/internal/utils"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -11,16 +13,8 @@ func GetDefaultBootstrapConfig() *BootstrapConfig {
 	return &BootstrapConfig{
 		Applications: []Application{
 			{
-				Name:           "direnv",
-				InstallCommand: "curl -sfL https://direnv.net/install.sh | bash",
-			},
-			{
 				Name:           "nix",
 				InstallCommand: "curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install --determinate",
-			},
-			{
-				Name:           "devbox",
-				InstallCommand: "curl -fsSL https://get.jetify.com/devbox | bash",
 			},
 		},
 	}
@@ -78,4 +72,137 @@ func executeInstallCommand(command string, output io.Writer) error {
 	cmd.Stderr = output
 
 	return cmd.Run()
+}
+
+// RunBootstrapWithHome runs the bootstrap process with home directory setup
+func RunBootstrapWithHome(templDir utils.TemplDir, output io.Writer, dryRun bool) error {
+	user := NewUser()
+	campPath := user.HomeDir + "/.camp"
+
+	fmt.Fprintf(output, "Bootstrapping your environment...\n")
+
+	if err := bootstrapHome(campPath, templDir, output, dryRun); err != nil {
+		return fmt.Errorf("failed to bootstrap home: %w", err)
+	}
+
+	if err := utils.RunCommand("nix", "--version"); err != nil {
+		fmt.Fprintf(output, "Nix is not installed. Installing Nix...\n")
+
+		if dryRun {
+			fmt.Fprintf(output, "[DRY RUN] Would execute: %s/bin/install_nix\n", campPath)
+		} else {
+			if err = utils.RunCommand(campPath + "/bin" + "/install_nix"); err != nil {
+				return fmt.Errorf("failed to install nix: %w", err)
+			}
+		}
+	}
+
+	if user.Platform == "linux" {
+		fmt.Fprintf(output, "Bootstrapping Linux...\n")
+		return bootstrapLinux(campPath, templDir, user, output, dryRun)
+	} else {
+		fmt.Fprintf(output, "Bootstrapping macOS...\n")
+		return bootstrapMac(campPath, templDir, user, output, dryRun)
+	}
+}
+
+// bootstrapHome sets up the home directory structure
+func bootstrapHome(campPath string, templDir utils.TemplDir, output io.Writer, dryRun bool) error {
+	folders := []string{
+		campPath,
+		campPath + "/nix",
+		campPath + "/bin",
+	}
+
+	for _, folder := range folders {
+		if dryRun {
+			fmt.Fprintf(output, "[DRY RUN] Would create directory: %s\n", folder)
+		} else {
+			if err := os.MkdirAll(folder, 0755); err != nil {
+				return fmt.Errorf("failed to create directory %s: %w", folder, err)
+			}
+		}
+	}
+
+	if err := copyBinFiles(templDir, campPath, output, dryRun); err != nil {
+		return fmt.Errorf("failed to copy bin files: %w", err)
+	}
+
+	return nil
+}
+
+// bootstrapMac sets up macOS-specific configuration with nix-darwin
+func bootstrapMac(campPath string, templDir utils.TemplDir, user *User, output io.Writer, dryRun bool) error {
+	content, err := templDir.ReadFile("templates/initial/darwin.nix")
+	if err != nil {
+		return err
+	}
+
+	content = utils.ReplaceInContent(content, "__USER__", user.HostName)
+
+	nixHome := campPath + "/nix"
+	flakePath := nixHome + "/flake.nix"
+
+	if dryRun {
+		fmt.Fprintf(output, "[DRY RUN] Would write darwin.nix to: %s\n", flakePath)
+	} else {
+		err = utils.SaveFile(content, flakePath)
+		if err != nil {
+			return err
+		}
+
+		utils.BackupFile("/etc/bashrc")
+		utils.BackupFile("/etc/zshrc")
+		utils.BackupFile("/etc/nix/nix.conf")
+
+		fmt.Fprintf(output, "Loading nix-darwin for the first time. This may take a while...\n")
+		return utils.RunCommand(campPath+"/bin"+"/bootstrap", campPath)
+	}
+
+	return nil
+}
+
+// bootstrapLinux sets up Linux-specific configuration with home-manager
+func bootstrapLinux(campPath string, templDir utils.TemplDir, user *User, output io.Writer, dryRun bool) error {
+	// TODO: Implement Linux bootstrap support
+	// This should:
+	// 1. Determine system based on architecture (x86_64-linux or aarch64-linux)
+	// 2. Copy flake.nix and home.nix with proper replacements (__USER__, __HOME__, __SYSTEM__)
+	// 3. Run the bootstrap script
+	return fmt.Errorf("Linux bootstrap is not yet implemented")
+}
+
+// copyBinFiles copies the bin files from the templates directory to the camp bin directory
+func copyBinFiles(templDir utils.TemplDir, campPath string, output io.Writer, dryRun bool) error {
+	binFiles, err := templDir.ReadDir("templates/initial/bin")
+	if err != nil {
+		return fmt.Errorf("failed to read directory bin: %w", err)
+	}
+
+	for _, file := range binFiles {
+		if !file.IsDir() {
+			destPath := campPath + "/bin/" + file.Name()
+
+			if dryRun {
+				fmt.Fprintf(output, "[DRY RUN] Would copy bin file: %s\n", destPath)
+				continue
+			}
+
+			content, err := templDir.ReadFile("templates/initial/bin/" + file.Name())
+			if err != nil {
+				return fmt.Errorf("failed to read file %s: %w", file.Name(), err)
+			}
+
+			if err = utils.SaveFile(content, destPath); err != nil {
+				return fmt.Errorf("failed to save file %s: %w", destPath, err)
+			}
+
+			// change file permissions to be executable
+			if err = os.Chmod(destPath, 0755); err != nil {
+				return fmt.Errorf("failed to change file permissions: %w", err)
+			}
+		}
+	}
+
+	return nil
 }

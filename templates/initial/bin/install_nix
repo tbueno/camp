@@ -1,0 +1,22 @@
+#!/bin/bash
+OS=$(uname)
+
+install_nix() {
+    if command -v "nix" &> /dev/null; then
+        echo "Nix is available. Skipping installation"
+    else
+        if [ "$OS" = "Darwin" ]; then
+            echo "This script is running on macOS"
+        elif [ "$OS" = "Linux" ]; then
+            echo "This script is running on Linux"
+            sudo apt-get update
+            sudo apt-get install -qq -y --no-install-recommends curl
+        fi
+        [ -f /etc/bashrc ] && sudo mv /etc/bashrc /etc/bashrc.before-nix
+        [ -f /etc/zshrc ] && sudo mv /etc/zshrc /etc/zshrc.before-nix
+        curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install --determinate
+        . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+    fi
+}
+install_nix
+. /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh

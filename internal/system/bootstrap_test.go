@@ -27,31 +27,20 @@ func TestGetDefaultBootstrapConfig(t *testing.T) {
 		}
 	}
 
-	foundDirenv := false
 	foundNix := false
-	foundDevbox := false
 	for _, app := range config.Applications {
-		if app.Name == "direnv" {
-			foundDirenv = true
-		}
 		if app.Name == "nix" {
 			foundNix = true
 		}
-		if app.Name == "devbox" {
-			foundDevbox = true
-		}
-	}
-
-	if !foundDirenv {
-		t.Error("Expected direnv to be in default applications")
 	}
 
 	if !foundNix {
 		t.Error("Expected nix to be in default applications")
 	}
 
-	if !foundDevbox {
-		t.Error("Expected devbox to be in default applications")
+	// Verify that only nix is included (direnv and devbox are installed via flake.nix)
+	if len(config.Applications) != 1 {
+		t.Errorf("Expected exactly 1 application (nix only), got %d", len(config.Applications))
 	}
 }
 
