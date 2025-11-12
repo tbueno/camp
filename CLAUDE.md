@@ -181,6 +181,89 @@ When writing template tests:
 - Test both with and without environment variables
 - Mock file operations where appropriate
 
+## Environment Rebuild System
+
+Camp provides an `env rebuild` command to rebuild the development environment using Nix configurations.
+
+### Rebuild Process Flow
+
+```
+PrepareEnvironment()
+    ↓
+1. Create ~/.camp/nix/ directory
+    ↓
+2. CopyConfigFiles()
+    ├─ Copy mac.nix
+    ├─ Copy linux.nix
+    └─ Copy modules/ directory
+    ↓
+3. CompileTemplates()
+    ├─ Reload user config (camp.yml)
+    ├─ Render flake.nix with user data
+    └─ Save to ~/.camp/nix/flake.nix
+    ↓
+ExecuteRebuild()
+    ├─ macOS: nix run nix-darwin#darwin-rebuild switch --flake ~/.camp/nix#<hostname>
+    └─ Linux: home-manager switch --impure -b backup --flake ~/.camp/nix#<username>
+```
+
+### Rebuild Functions
+
+**PrepareEnvironment(user *User)**
+- Orchestrates the entire preparation process
+- Creates necessary directories
+- Calls CopyConfigFiles() and CompileTemplates()
+- Returns error if any step fails
+
+**CopyConfigFiles(user *User)**
+- Copies .nix files from `templates/files/` to `~/.camp/nix/`
+- Excludes `flake.nix` (rendered separately)
+- Recursively copies directories (e.g., `modules/`)
+- Preserves file permissions
+
+**CompileTemplates(user *User)**
+- Reloads user configuration from camp.yml
+- Renders flake.nix template with current user data
+- Writes output to `~/.camp/nix/flake.nix`
+
+**ExecuteRebuild(user *User)**
+- Runs platform-specific rebuild commands
+- **macOS**: Uses nix-darwin for system configuration
+- **Linux**: Uses home-manager for user environment
+- Returns error for unsupported platforms
+
+### Platform-Specific Behavior
+
+**macOS (darwin):**
+- Uses `nix-darwin` for system-level configuration
+- Command: `nix run nix-darwin#darwin-rebuild switch --flake <path>#<hostname>`
+- Requires nix-darwin to be installed
+- Applies both system and home-manager configurations
+
+**Linux:**
+- Uses `home-manager` for user-level configuration
+- Command: `home-manager switch --impure -b backup --flake <path>#<username>`
+- Requires home-manager to be installed
+- Creates backups of modified files
+
+### Error Handling
+
+The rebuild system handles errors at each stage:
+- Missing directories are created automatically
+- Template rendering errors are reported clearly
+- Platform detection prevents unsupported operations
+- Command execution errors are propagated with context
+
+### Testing Rebuild Logic
+
+When writing rebuild tests:
+- Use temporary directories for all file operations
+- Create mock config files in test directories
+- Verify directory and file creation
+- Test platform-specific logic separately
+- Mock external command execution (nix, home-manager)
+- Test error conditions (missing directories, unsupported platforms)
+
 ## Current Commands
 
 The source code commands can be executes with the command `go run main.go <command>`. Running the command `go run main.go` will display the help message for all the commands.
