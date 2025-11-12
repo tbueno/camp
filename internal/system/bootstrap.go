@@ -91,7 +91,7 @@ func RunBootstrapWithHome(templDir utils.TemplDir, output io.Writer, dryRun bool
 		if dryRun {
 			fmt.Fprintf(output, "[DRY RUN] Would execute: %s/bin/install_nix\n", campPath)
 		} else {
-			if err = utils.RunCommand(campPath + "/bin" + "/install_nix"); err != nil {
+			if err = utils.RunCommand(campPath+"/bin"+"/install_nix", campPath); err != nil {
 				return fmt.Errorf("failed to install nix: %w", err)
 			}
 		}
@@ -133,20 +133,36 @@ func bootstrapHome(campPath string, templDir utils.TemplDir, output io.Writer, d
 
 // bootstrapMac sets up macOS-specific configuration with nix-darwin
 func bootstrapMac(campPath string, templDir utils.TemplDir, user *User, output io.Writer, dryRun bool) error {
-	content, err := templDir.ReadFile("templates/initial/darwin.nix")
+	// Read and process darwin.nix (flake.nix)
+	darwinContent, err := templDir.ReadFile("templates/initial/darwin.nix")
+	if err != nil {
+		return err
+	}
+	darwinContent = utils.ReplaceInContent(darwinContent, "__USER__", user.Name)
+	darwinContent = utils.ReplaceInContent(darwinContent, "__HOME__", user.HomeDir)
+
+	// Read home.nix (no replacements needed - nix-darwin handles user info)
+	homeContent, err := templDir.ReadFile("templates/initial/home.nix")
 	if err != nil {
 		return err
 	}
 
-	content = utils.ReplaceInContent(content, "__USER__", user.HostName)
-
 	nixHome := campPath + "/nix"
 	flakePath := nixHome + "/flake.nix"
+	homePath := nixHome + "/home.nix"
 
 	if dryRun {
 		fmt.Fprintf(output, "[DRY RUN] Would write darwin.nix to: %s\n", flakePath)
+		fmt.Fprintf(output, "[DRY RUN] Would write home.nix to: %s\n", homePath)
 	} else {
-		err = utils.SaveFile(content, flakePath)
+		// Save flake.nix
+		err = utils.SaveFile(darwinContent, flakePath)
+		if err != nil {
+			return err
+		}
+
+		// Save home.nix
+		err = utils.SaveFile(homeContent, homePath)
 		if err != nil {
 			return err
 		}

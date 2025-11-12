@@ -1,21 +1,21 @@
-# This is an empty template just used to setup the basic nix darwin.
-# It should be overriden by the actual configuration in the setup scripts
 {
-  description = "Example Darwin system flake";
+  description = "Initial Darwin system flake with home-manager";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     nix-darwin.url = "github:LnL7/nix-darwin";
     nix-darwin.inputs.nixpkgs.follows = "nixpkgs";
+    home-manager.url = "github:nix-community/home-manager";
+    home-manager.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = inputs@{ self, nix-darwin, nixpkgs }:
+  outputs = inputs@{ self, nix-darwin, nixpkgs, home-manager }:
   let
+    username = "__USER__";
+    homeDirectory = "__HOME__";
+
     configuration = { pkgs, ... }: {
-      environment.systemPackages =
-        [
-          pkgs.git
-        ];
+      environment.systemPackages = [ ];
       nix.enable = false;
       nix.settings.experimental-features = "nix-command flakes";
       programs.zsh.enable = true;  # default shell on catalina
@@ -23,13 +23,26 @@
       system.stateVersion = 5;
 
       nixpkgs.hostPlatform = "aarch64-darwin";
+
+      users.users."${username}" = {
+        name = username;
+        home = homeDirectory;
+      };
     };
   in
   {
-    darwinConfigurations."__USER__" = nix-darwin.lib.darwinSystem {
-      modules = [ configuration ];
+    darwinConfigurations."${username}" = nix-darwin.lib.darwinSystem {
+      modules = [
+        configuration
+        home-manager.darwinModules.home-manager
+        {
+          home-manager.useGlobalPkgs = true;
+          home-manager.useUserPackages = true;
+          home-manager.users."${username}" = import ./home.nix;
+        }
+      ];
     };
 
-    darwinPackages = self.darwinConfigurations."__USER__".pkgs;
+    darwinPackages = self.darwinConfigurations."${username}".pkgs;
   };
 }

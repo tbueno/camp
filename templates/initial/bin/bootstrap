@@ -13,15 +13,20 @@ setup_nix() {
 
     . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
     if [ "$OS" = "Darwin" ]; then
-        if command -v "brew" &> /dev/null; then
-            echo "Homebrew is available. Skipping installation"
-        else
-            echo "Installing homebrew"
-            NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-        fi
+        echo "Updating flake inputs..."
         nix --extra-experimental-features nix-command --extra-experimental-features flakes flake update --flake "$CAMP_DIR/nix"
+
+        echo "Building and activating nix-darwin configuration..."
+        USERNAME=$(whoami)
+        USER_HOME="$HOME"
+        # This DOES make system changes:
+        # - Modifies /etc/bashrc and /etc/zshrc
+        # - Modifies /etc/nix/nix.conf
+        # - Installs packages defined in home-manager
+        # - Activates the new system configuration
+
+        sudo --preserve-env=HOME,USER nix --extra-experimental-features nix-command --extra-experimental-features flakes run nix-darwin -- switch --flake "$CAMP_DIR/nix#$USERNAME"
     elif [ "$OS" = "Linux" ]; then
-        . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
         nix-channel --add https://github.com/nix-community/home-manager/archive/release-24.11.tar.gz home-manager
         nix-channel --update
         nix-shell '<home-manager>' -A install
