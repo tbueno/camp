@@ -1,0 +1,42 @@
+#!/bin/bash
+OS=$(uname)
+
+# Check if the camp directory is provided as a parameter
+CAMP_DIR="$1"
+if [ -z $CAMP_DIR ]; then
+    echo "Usage: $0 <camp_directory>"
+    exit 1
+fi
+
+
+setup_nix() {
+
+    . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+    if [ "$OS" = "Darwin" ]; then
+        echo "Updating flake inputs..."
+        nix --extra-experimental-features nix-command --extra-experimental-features flakes flake update --flake "$CAMP_DIR/nix"
+
+        echo "Building and activating nix-darwin configuration..."
+        USERNAME=$(whoami)
+        USER_HOME="$HOME"
+        # This DOES make system changes:
+        # - Modifies /etc/bashrc and /etc/zshrc
+        # - Modifies /etc/nix/nix.conf
+        # - Installs packages defined in home-manager
+        # - Activates the new system configuration
+
+        sudo --preserve-env=HOME,USER nix --extra-experimental-features nix-command --extra-experimental-features flakes run nix-darwin -- switch --flake "$CAMP_DIR/nix#$USERNAME"
+    elif [ "$OS" = "Linux" ]; then
+        nix-channel --add https://github.com/nix-community/home-manager/archive/release-24.11.tar.gz home-manager
+        nix-channel --update
+        nix-shell '<home-manager>' -A install
+        ln -s $CAMP_DIR/nix/flake.nix ~/.config/home-manager/flake.nix -f
+        ln -s $CAMP_DIR/nix/home.nix ~/.config/home-manager/home.nix -f
+        home-manager switch
+    fi
+}
+
+setup_nix
+exec $SHELL
+
+echo "You system was bootstrapped. Please open a new terminal and execute 'camp env rebuild' to complete your setup."
