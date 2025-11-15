@@ -89,8 +89,8 @@ func TestGetExportedVars(t *testing.T) {
 			expected: []EnvVar{},
 		},
 		{
-			name:     "non-export lines ignored",
-			input:    "echo hello\nexport FOO=bar\nls -la",
+			name:  "non-export lines ignored",
+			input: "echo hello\nexport FOO=bar\nls -la",
 			expected: []EnvVar{
 				{Name: "FOO", Value: "bar"},
 			},
