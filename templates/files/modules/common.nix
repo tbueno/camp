@@ -5,8 +5,8 @@
 
   programs.direnv = {
     enable = true;
-    enableZshIntegration = true;
-    enableBashIntegration = true;
+    enableZshIntegration = true;   # Enable zsh integration for direnv
+    enableBashIntegration = false;
     nix-direnv.enable = true;
   };
 
@@ -15,20 +15,23 @@
     packages = with pkgs; [
       devbox
       direnv
+      git  # Add git from Nix to ensure it's available
     ];
     stateVersion = "24.05";
     username = user;
 
+    # Session variables managed by home-manager through zsh
     sessionVariables = customEnvVars;
   };
 
+  # Enable zsh management with dotDir approach
   programs.zsh = {
     enable = true;
     dotDir = ".camp";
 
-    # These commands will be added to .zshrc file. They are executed after the shell is initialized with .zshenv
+    # Source user's original .zshrc after camp's config loads
     initExtra = ''
-        [ -f ~/.zshrc ] && source ~/.zshrc
+      [ -f ~/.zshrc ] && source ~/.zshrc
     '';
   };
 }

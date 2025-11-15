@@ -266,7 +266,18 @@ When writing rebuild tests:
 
 ## Current Commands
 
-The source code commands can be executes with the command `go run main.go <command>`. Running the command `go run main.go` will display the help message for all the commands.
+To see a list of available commands, run:
+```bash
+camp --help
+# or during development:
+go run main.go --help
+```
+
+For detailed help on any command:
+```bash
+camp <command> --help
+# Example: camp env rebuild --help
+```
 
 ## Migration from Optishell
 

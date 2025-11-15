@@ -15,7 +15,10 @@ Camp relies on existing tools like [direnv](https://direnv.net/) and [devbox](ht
 
 ### Current Features
 - **System Information**: Get detailed information about your system architecture and operating system
-- TBD
+- **Environment Configuration**: Manage custom environment variables via `camp.yml`
+- **Nix Integration**: Rebuild development environments using Nix configurations
+- **Platform Support**: Works on both macOS (via nix-darwin) and Linux (via home-manager)
+- **Template System**: Dynamic Nix configuration generation with user-specific data
 
 ### Planned Features
 - Environment isolation using direnv and devbox
@@ -42,12 +45,61 @@ go install
 
 ## Usage
 
+### Commands
+
+**Environment Information**
+```bash
+# Display system and environment information
+camp env
+```
+
+**Environment Rebuild**
+```bash
+# Rebuild development environment with latest configuration
+camp env rebuild
+```
+
+This command:
+1. Copies Nix configuration files to `~/.camp/nix/`
+2. Renders `flake.nix` with your custom environment variables from `camp.yml`
+3. Executes platform-specific rebuild:
+   - **macOS**: Uses `nix-darwin` to rebuild system configuration
+   - **Linux**: Uses `home-manager` to rebuild user environment
+
+**Prerequisites for Rebuild:**
+- Nix package manager must be installed
+- macOS: nix-darwin must be configured
+- Linux: home-manager must be configured
+
+**Bootstrap**
+```bash
+# Initial environment setup
+camp bootstrap
+```
+
+### Configuration
+
+Camp uses a YAML configuration file to customize your environment.
+
+**Location:** `~/.camp/camp.yml` (or `.yaml`)
+
+**Example configuration:**
+```yaml
+env:
+  EDITOR: nvim
+  BROWSER: firefox
+  CUSTOM_VAR: custom_value
+```
+
+All variables defined in the `env` section will be injected into your Nix environment configuration.
+
 ### Command Help
 
 Get help for any command:
 ```bash
 camp --help
 camp env --help
+camp env rebuild --help
 ```
 
 ## Development

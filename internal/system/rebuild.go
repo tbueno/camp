@@ -137,11 +137,17 @@ func ExecuteRebuild(user *User) error {
 	switch user.Platform {
 	case "darwin":
 		// macOS: use nix-darwin
-		cmd = "nix"
+		// Note: nix-darwin may require sudo for system activation
+		cmd = "sudo"
 		args = []string{
+			"nix",
+			"--extra-experimental-features",
+			"nix-command flakes",
 			"run",
 			"nix-darwin#darwin-rebuild",
+			"--", // Separator: everything after this goes to darwin-rebuild
 			"switch",
+			"--impure",
 			"--flake",
 			fmt.Sprintf("%s#%s", nixDir, user.HostName),
 		}
