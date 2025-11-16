@@ -29,6 +29,7 @@ type User struct {
 	Shell        string
 	HostName     string
 	EnvVars      map[string]string // Custom environment variables from camp.yml
+	Flakes       []Flake           // External Nix flakes from camp.yml
 }
 
 // NewUser creates a new User instance using only current user's machine information.
@@ -43,18 +44,19 @@ func NewUser() *User {
 		Shell:        shell,
 		HostName:     utils.HostName(),
 		EnvVars:      make(map[string]string),
+		Flakes:       []Flake{},
 	}
-	// Load config and populate EnvVars if available
+	// Load config and populate EnvVars and Flakes if available
 	user.Reload()
 	return user
 }
 
 // Reload refreshes the user's configuration from camp.yml
-// This loads environment variables from ~/.camp/camp.yml or ~/.camp/camp.yaml
+// This loads environment variables and flakes from ~/.camp/camp.yml or ~/.camp/camp.yaml
 func (u *User) Reload() error {
 	config, err := LoadUserConfig(u.HomeDir)
 	if err != nil {
-		// If config loading fails, keep existing EnvVars
+		// If config loading fails, keep existing EnvVars and Flakes
 		return err
 	}
 
@@ -65,7 +67,38 @@ func (u *User) Reload() error {
 		u.EnvVars = make(map[string]string)
 	}
 
+	// Update Flakes from config
+	if config.Flakes != nil {
+		u.Flakes = config.Flakes
+	} else {
+		u.Flakes = []Flake{}
+	}
+
 	return nil
+}
+
+// FlakeOutputType defines the allowed types for a flake's output
+type FlakeOutputType string
+
+const (
+	// OutputTypeSystem indicates the output should be applied at system level (nix-darwin)
+	OutputTypeSystem FlakeOutputType = "system"
+	// OutputTypeHome indicates the output should be applied at user level (home-manager)
+	OutputTypeHome FlakeOutputType = "home"
+)
+
+// FlakeOutput represents a specific output from a flake
+type FlakeOutput struct {
+	Name string          `yaml:"name"` // Output name (e.g., "packages", "homeManagerModules.default")
+	Type FlakeOutputType `yaml:"type"` // Where to apply: "system" or "home"
+}
+
+// Flake represents an external Nix flake reference
+type Flake struct {
+	Name    string            `yaml:"name"`    // Unique identifier for the flake
+	URL     string            `yaml:"url"`     // Flake URL (github:user/repo, git+ssh://..., path:/..., etc.)
+	Follows map[string]string `yaml:"follows"` // Input dependency overrides (e.g., nixpkgs: "nixpkgs")
+	Outputs []FlakeOutput     `yaml:"outputs"` // Which outputs to import
 }
 
 // EnvVar represents an environment variable

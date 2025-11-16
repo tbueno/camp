@@ -10,13 +10,15 @@ import (
 
 // CampConfig represents the camp.yml configuration file
 type CampConfig struct {
-	Env map[string]string `yaml:"env"` // Environment variables
+	Env    map[string]string `yaml:"env"`    // Environment variables
+	Flakes []Flake           `yaml:"flakes"` // External Nix flakes to integrate
 }
 
 // DefaultConfig returns a CampConfig with sensible defaults
 func DefaultConfig() *CampConfig {
 	return &CampConfig{
-		Env: make(map[string]string),
+		Env:    make(map[string]string),
+		Flakes: []Flake{},
 	}
 }
 
@@ -44,6 +46,11 @@ func LoadConfig(path string) (*CampConfig, error) {
 	// Initialize Env map if nil
 	if config.Env == nil {
 		config.Env = make(map[string]string)
+	}
+
+	// Initialize Flakes slice if nil
+	if config.Flakes == nil {
+		config.Flakes = []Flake{}
 	}
 
 	return &config, nil
