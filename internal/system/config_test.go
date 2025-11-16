@@ -638,3 +638,301 @@ func TestSaveConfig_WithFlakes(t *testing.T) {
 		t.Errorf("Expected follows[nixpkgs]=nixpkgs, got %s", loadedConfig.Flakes[0].Follows["nixpkgs"])
 	}
 }
+
+// Validation tests
+
+func TestValidateFlakes_DuplicateNames(t *testing.T) {
+	config := &CampConfig{
+		Flakes: []Flake{
+			{
+				Name: "duplicate",
+				URL:  "github:user/flake1",
+				Outputs: []FlakeOutput{
+					{Name: "packages", Type: OutputTypeHome},
+				},
+			},
+			{
+				Name: "duplicate",
+				URL:  "github:user/flake2",
+				Outputs: []FlakeOutput{
+					{Name: "packages", Type: OutputTypeHome},
+				},
+			},
+		},
+	}
+
+	err := config.ValidateFlakes()
+	if err == nil {
+		t.Error("ValidateFlakes() should error on duplicate flake names")
+	}
+
+	if err != nil && err.Error() != "duplicate flake name 'duplicate' - flake names must be unique" {
+		t.Errorf("Expected duplicate name error, got: %v", err)
+	}
+}
+
+func TestValidateFlakes_EmptyName(t *testing.T) {
+	config := &CampConfig{
+		Flakes: []Flake{
+			{
+				Name: "",
+				URL:  "github:user/flake",
+				Outputs: []FlakeOutput{
+					{Name: "packages", Type: OutputTypeHome},
+				},
+			},
+		},
+	}
+
+	err := config.ValidateFlakes()
+	if err == nil {
+		t.Error("ValidateFlakes() should error on empty flake name")
+	}
+
+	if err != nil && err.Error() != "flake at index 0 has empty name" {
+		t.Errorf("Expected empty name error, got: %v", err)
+	}
+}
+
+func TestValidateFlakes_InvalidNixIdentifier(t *testing.T) {
+	tests := []struct {
+		name      string
+		flakeName string
+	}{
+		{"with spaces", "my flake"},
+		{"with dots", "my.flake"},
+		{"with special chars", "my@flake"},
+		{"with slashes", "my/flake"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &CampConfig{
+				Flakes: []Flake{
+					{
+						Name: tt.flakeName,
+						URL:  "github:user/flake",
+						Outputs: []FlakeOutput{
+							{Name: "packages", Type: OutputTypeHome},
+						},
+					},
+				},
+			}
+
+			err := config.ValidateFlakes()
+			if err == nil {
+				t.Errorf("ValidateFlakes() should error on invalid Nix identifier '%s'", tt.flakeName)
+			}
+		})
+	}
+}
+
+func TestValidateFlakes_ValidNixIdentifiers(t *testing.T) {
+	validNames := []string{
+		"my-flake",
+		"my_flake",
+		"MyFlake",
+		"flake123",
+		"123flake",
+		"FLAKE",
+		"_flake_",
+		"flake-with-many-hyphens",
+	}
+
+	for _, name := range validNames {
+		t.Run(name, func(t *testing.T) {
+			config := &CampConfig{
+				Flakes: []Flake{
+					{
+						Name: name,
+						URL:  "github:user/flake",
+						Outputs: []FlakeOutput{
+							{Name: "packages", Type: OutputTypeHome},
+						},
+					},
+				},
+			}
+
+			if err := config.ValidateFlakes(); err != nil {
+				t.Errorf("ValidateFlakes() should accept valid Nix identifier '%s', got error: %v", name, err)
+			}
+		})
+	}
+}
+
+func TestValidateFlakes_EmptyURL(t *testing.T) {
+	config := &CampConfig{
+		Flakes: []Flake{
+			{
+				Name: "my-flake",
+				URL:  "",
+				Outputs: []FlakeOutput{
+					{Name: "packages", Type: OutputTypeHome},
+				},
+			},
+		},
+	}
+
+	err := config.ValidateFlakes()
+	if err == nil {
+		t.Error("ValidateFlakes() should error on empty URL")
+	}
+
+	if err != nil && err.Error() != "flake 'my-flake' has empty URL" {
+		t.Errorf("Expected empty URL error, got: %v", err)
+	}
+}
+
+func TestValidateFlakes_NoOutputs(t *testing.T) {
+	config := &CampConfig{
+		Flakes: []Flake{
+			{
+				Name:    "my-flake",
+				URL:     "github:user/flake",
+				Outputs: []FlakeOutput{},
+			},
+		},
+	}
+
+	err := config.ValidateFlakes()
+	if err == nil {
+		t.Error("ValidateFlakes() should error on flake with no outputs")
+	}
+
+	if err != nil && err.Error() != "flake 'my-flake' has no outputs defined - at least one output is required" {
+		t.Errorf("Expected no outputs error, got: %v", err)
+	}
+}
+
+func TestValidateFlakes_EmptyOutputName(t *testing.T) {
+	config := &CampConfig{
+		Flakes: []Flake{
+			{
+				Name: "my-flake",
+				URL:  "github:user/flake",
+				Outputs: []FlakeOutput{
+					{Name: "", Type: OutputTypeHome},
+				},
+			},
+		},
+	}
+
+	err := config.ValidateFlakes()
+	if err == nil {
+		t.Error("ValidateFlakes() should error on empty output name")
+	}
+
+	if err != nil && err.Error() != "flake 'my-flake' output at index 0 has empty name" {
+		t.Errorf("Expected empty output name error, got: %v", err)
+	}
+}
+
+func TestValidateFlakes_InvalidOutputType(t *testing.T) {
+	config := &CampConfig{
+		Flakes: []Flake{
+			{
+				Name: "my-flake",
+				URL:  "github:user/flake",
+				Outputs: []FlakeOutput{
+					{Name: "packages", Type: "invalid"},
+				},
+			},
+		},
+	}
+
+	err := config.ValidateFlakes()
+	if err == nil {
+		t.Error("ValidateFlakes() should error on invalid output type")
+	}
+
+	if err != nil && err.Error() != "flake 'my-flake' output 'packages' has invalid type 'invalid' - must be 'system' or 'home'" {
+		t.Errorf("Expected invalid output type error, got: %v", err)
+	}
+}
+
+func TestValidateFlakes_EmptyFlakes(t *testing.T) {
+	config := &CampConfig{
+		Flakes: []Flake{},
+	}
+
+	if err := config.ValidateFlakes(); err != nil {
+		t.Errorf("ValidateFlakes() should not error on empty flakes, got: %v", err)
+	}
+}
+
+func TestValidateFlakes_NilFlakes(t *testing.T) {
+	config := &CampConfig{
+		Flakes: nil,
+	}
+
+	if err := config.ValidateFlakes(); err != nil {
+		t.Errorf("ValidateFlakes() should not error on nil flakes, got: %v", err)
+	}
+}
+
+func TestValidateFlakes_ValidConfiguration(t *testing.T) {
+	config := &CampConfig{
+		Flakes: []Flake{
+			{
+				Name: "flake1",
+				URL:  "github:user/flake1",
+				Follows: map[string]string{
+					"nixpkgs": "nixpkgs",
+				},
+				Outputs: []FlakeOutput{
+					{Name: "packages", Type: OutputTypeHome},
+					{Name: "homeManagerModules.default", Type: OutputTypeHome},
+				},
+			},
+			{
+				Name: "flake2",
+				URL:  "git+ssh://git@github.com/org/flake2.git",
+				Outputs: []FlakeOutput{
+					{Name: "darwinModules.team", Type: OutputTypeSystem},
+				},
+			},
+		},
+	}
+
+	if err := config.ValidateFlakes(); err != nil {
+		t.Errorf("ValidateFlakes() should not error on valid configuration, got: %v", err)
+	}
+}
+
+func TestLoadConfig_ValidationError(t *testing.T) {
+	// Create temporary directory
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "camp.yml")
+
+	// Write YAML with invalid flakes (duplicate names)
+	yamlContent := `flakes:
+  - name: duplicate
+    url: "github:user/flake1"
+    outputs:
+      - name: packages
+        type: home
+
+  - name: duplicate
+    url: "github:user/flake2"
+    outputs:
+      - name: packages
+        type: home
+`
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	// Load config - should return validation error
+	_, err := LoadConfig(configPath)
+	if err == nil {
+		t.Error("LoadConfig() should return validation error for invalid flakes")
+	}
+
+	if err != nil && !os.IsNotExist(err) {
+		// Check that it's a validation error
+		expectedMsg := "invalid configuration: duplicate flake name 'duplicate' - flake names must be unique"
+		if err.Error() != expectedMsg {
+			t.Errorf("Expected validation error, got: %v", err)
+		}
+	}
+}
