@@ -151,9 +151,76 @@ func (c *CampConfig) ValidateFlakes() error {
 					flake.Name, output.Name, output.Type)
 			}
 		}
+
+		// Validate arguments
+		if err := validateFlakeArgs(flake.Name, flake.Args); err != nil {
+			return err
+		}
 	}
 
 	return nil
+}
+
+// validateFlakeArgs validates the arguments for a flake
+func validateFlakeArgs(flakeName string, args map[string]interface{}) error {
+	if args == nil || len(args) == 0 {
+		// Empty args is valid
+		return nil
+	}
+
+	// Reserved argument names (automatically provided by camp)
+	reservedNames := map[string]bool{
+		"userName": true,
+		"hostName": true,
+		"home":     true,
+	}
+
+	for argName, argValue := range args {
+		// Validate arg name is not empty
+		if argName == "" {
+			return fmt.Errorf("flake '%s' has an argument with empty name", flakeName)
+		}
+
+		// Validate arg name is a valid Nix identifier
+		if !isValidNixIdentifier(argName) {
+			return fmt.Errorf("flake '%s' argument '%s' has invalid name - must contain only letters, numbers, hyphens, and underscores", flakeName, argName)
+		}
+
+		// Check for reserved names
+		if reservedNames[argName] {
+			return fmt.Errorf("flake '%s' argument '%s' uses a reserved name - userName, hostName, and home are automatically provided", flakeName, argName)
+		}
+
+		// Validate argument type is supported
+		if err := validateArgType(flakeName, argName, argValue); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// validateArgType validates that an argument value is a supported type
+func validateArgType(flakeName, argName string, value interface{}) error {
+	switch v := value.(type) {
+	case string, bool, int, int64, float64:
+		// Supported scalar types
+		return nil
+	case []interface{}:
+		// Validate list elements are supported types
+		for i, elem := range v {
+			switch elem.(type) {
+			case string, bool, int, int64, float64:
+				// Supported element types
+				continue
+			default:
+				return fmt.Errorf("flake '%s' argument '%s' list element at index %d has unsupported type (only string, bool, number are supported in lists)", flakeName, argName, i)
+			}
+		}
+		return nil
+	default:
+		return fmt.Errorf("flake '%s' argument '%s' has unsupported type - only string, bool, number, and list types are supported", flakeName, argName)
+	}
 }
 
 // isValidNixIdentifier checks if a string is a valid Nix identifier

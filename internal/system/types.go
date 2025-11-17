@@ -98,6 +98,7 @@ type Flake struct {
 	Name    string            `yaml:"name"`    // Unique identifier for the flake
 	URL     string            `yaml:"url"`     // Flake URL (github:user/repo, git+ssh://..., path:/..., etc.)
 	Follows map[string]string `yaml:"follows"` // Input dependency overrides (e.g., nixpkgs: "nixpkgs")
+	Args    map[string]interface{} `yaml:"args"` // Custom arguments to pass to flake outputs (types inferred from YAML)
 	Outputs []FlakeOutput     `yaml:"outputs"` // Which outputs to import
 }
 

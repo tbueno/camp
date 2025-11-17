@@ -936,3 +936,452 @@ func TestLoadConfig_ValidationError(t *testing.T) {
 		}
 	}
 }
+
+// Flake Arguments Validation Tests
+
+func TestValidateFlakeArgs_ValidArgs(t *testing.T) {
+	config := &CampConfig{
+		Flakes: []Flake{
+			{
+				Name: "test-flake",
+				URL:  "github:user/flake",
+				Args: map[string]interface{}{
+					"email":          "test@example.com",
+					"enableFeature":  true,
+					"fontSize":       14,
+					"threshold":      3.14,
+					"packages":       []interface{}{"vim", "git", "tmux"},
+					"ports":          []interface{}{8080, 9090, 3000},
+					"enabledModules": []interface{}{true, false, true},
+				},
+				Outputs: []FlakeOutput{
+					{Name: "packages", Type: OutputTypeHome},
+				},
+			},
+		},
+	}
+
+	if err := config.ValidateFlakes(); err != nil {
+		t.Errorf("ValidateFlakes() should not error on valid args, got: %v", err)
+	}
+}
+
+func TestValidateFlakeArgs_EmptyArgs(t *testing.T) {
+	config := &CampConfig{
+		Flakes: []Flake{
+			{
+				Name: "test-flake",
+				URL:  "github:user/flake",
+				Args: map[string]interface{}{},
+				Outputs: []FlakeOutput{
+					{Name: "packages", Type: OutputTypeHome},
+				},
+			},
+		},
+	}
+
+	if err := config.ValidateFlakes(); err != nil {
+		t.Errorf("ValidateFlakes() should not error on empty args map, got: %v", err)
+	}
+}
+
+func TestValidateFlakeArgs_NilArgs(t *testing.T) {
+	config := &CampConfig{
+		Flakes: []Flake{
+			{
+				Name:    "test-flake",
+				URL:     "github:user/flake",
+				Args:    nil,
+				Outputs: []FlakeOutput{
+					{Name: "packages", Type: OutputTypeHome},
+				},
+			},
+		},
+	}
+
+	if err := config.ValidateFlakes(); err != nil {
+		t.Errorf("ValidateFlakes() should not error on nil args, got: %v", err)
+	}
+}
+
+func TestValidateFlakeArgs_ReservedNames(t *testing.T) {
+	tests := []struct {
+		name         string
+		argName      string
+		expectedMsg  string
+	}{
+		{
+			name:        "userName reserved",
+			argName:     "userName",
+			expectedMsg: "flake 'test-flake' argument 'userName' uses a reserved name - userName, hostName, and home are automatically provided",
+		},
+		{
+			name:        "hostName reserved",
+			argName:     "hostName",
+			expectedMsg: "flake 'test-flake' argument 'hostName' uses a reserved name - userName, hostName, and home are automatically provided",
+		},
+		{
+			name:        "home reserved",
+			argName:     "home",
+			expectedMsg: "flake 'test-flake' argument 'home' uses a reserved name - userName, hostName, and home are automatically provided",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &CampConfig{
+				Flakes: []Flake{
+					{
+						Name: "test-flake",
+						URL:  "github:user/flake",
+						Args: map[string]interface{}{
+							tt.argName: "some-value",
+						},
+						Outputs: []FlakeOutput{
+							{Name: "packages", Type: OutputTypeHome},
+						},
+					},
+				},
+			}
+
+			err := config.ValidateFlakes()
+			if err == nil {
+				t.Errorf("ValidateFlakes() should error on reserved arg name '%s'", tt.argName)
+			}
+
+			if err != nil && err.Error() != tt.expectedMsg {
+				t.Errorf("Expected error '%s', got: %v", tt.expectedMsg, err)
+			}
+		})
+	}
+}
+
+func TestValidateFlakeArgs_InvalidArgNames(t *testing.T) {
+	tests := []struct {
+		name    string
+		argName string
+	}{
+		{"with spaces", "my arg"},
+		{"with dots", "my.arg"},
+		{"with special chars", "my@arg"},
+		{"with slashes", "my/arg"},
+		{"with colons", "my:arg"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &CampConfig{
+				Flakes: []Flake{
+					{
+						Name: "test-flake",
+						URL:  "github:user/flake",
+						Args: map[string]interface{}{
+							tt.argName: "value",
+						},
+						Outputs: []FlakeOutput{
+							{Name: "packages", Type: OutputTypeHome},
+						},
+					},
+				},
+			}
+
+			err := config.ValidateFlakes()
+			if err == nil {
+				t.Errorf("ValidateFlakes() should error on invalid arg name '%s'", tt.argName)
+			}
+		})
+	}
+}
+
+func TestValidateFlakeArgs_ValidArgNames(t *testing.T) {
+	validNames := []string{
+		"email",
+		"enable-feature",
+		"enable_feature",
+		"FONT_SIZE",
+		"arg123",
+		"_private",
+		"arg-with-many-hyphens",
+		"arg_with_underscores",
+	}
+
+	for _, argName := range validNames {
+		t.Run(argName, func(t *testing.T) {
+			config := &CampConfig{
+				Flakes: []Flake{
+					{
+						Name: "test-flake",
+						URL:  "github:user/flake",
+						Args: map[string]interface{}{
+							argName: "value",
+						},
+						Outputs: []FlakeOutput{
+							{Name: "packages", Type: OutputTypeHome},
+						},
+					},
+				},
+			}
+
+			if err := config.ValidateFlakes(); err != nil {
+				t.Errorf("ValidateFlakes() should accept valid arg name '%s', got error: %v", argName, err)
+			}
+		})
+	}
+}
+
+func TestValidateFlakeArgs_UnsupportedTypes(t *testing.T) {
+	tests := []struct {
+		name        string
+		argValue    interface{}
+		expectedMsg string
+	}{
+		{
+			name:        "map type",
+			argValue:    map[string]string{"key": "value"},
+			expectedMsg: "flake 'test-flake' argument 'testArg' has unsupported type - only string, bool, number, and list types are supported",
+		},
+		{
+			name:        "nil value",
+			argValue:    nil,
+			expectedMsg: "flake 'test-flake' argument 'testArg' has unsupported type - only string, bool, number, and list types are supported",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &CampConfig{
+				Flakes: []Flake{
+					{
+						Name: "test-flake",
+						URL:  "github:user/flake",
+						Args: map[string]interface{}{
+							"testArg": tt.argValue,
+						},
+						Outputs: []FlakeOutput{
+							{Name: "packages", Type: OutputTypeHome},
+						},
+					},
+				},
+			}
+
+			err := config.ValidateFlakes()
+			if err == nil {
+				t.Errorf("ValidateFlakes() should error on unsupported type %T", tt.argValue)
+			}
+
+			if err != nil && err.Error() != tt.expectedMsg {
+				t.Errorf("Expected error '%s', got: %v", tt.expectedMsg, err)
+			}
+		})
+	}
+}
+
+func TestValidateFlakeArgs_ListWithInvalidElements(t *testing.T) {
+	tests := []struct {
+		name        string
+		listValue   []interface{}
+		expectedMsg string
+	}{
+		{
+			name:        "list with map element",
+			listValue:   []interface{}{"string", map[string]string{"key": "value"}},
+			expectedMsg: "flake 'test-flake' argument 'myList' list element at index 1 has unsupported type (only string, bool, number are supported in lists)",
+		},
+		{
+			name:        "list with nil element",
+			listValue:   []interface{}{"string", nil},
+			expectedMsg: "flake 'test-flake' argument 'myList' list element at index 1 has unsupported type (only string, bool, number are supported in lists)",
+		},
+		{
+			name:        "list with nested list",
+			listValue:   []interface{}{"string", []interface{}{"nested"}},
+			expectedMsg: "flake 'test-flake' argument 'myList' list element at index 1 has unsupported type (only string, bool, number are supported in lists)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &CampConfig{
+				Flakes: []Flake{
+					{
+						Name: "test-flake",
+						URL:  "github:user/flake",
+						Args: map[string]interface{}{
+							"myList": tt.listValue,
+						},
+						Outputs: []FlakeOutput{
+							{Name: "packages", Type: OutputTypeHome},
+						},
+					},
+				},
+			}
+
+			err := config.ValidateFlakes()
+			if err == nil {
+				t.Error("ValidateFlakes() should error on list with invalid element types")
+			}
+
+			if err != nil && err.Error() != tt.expectedMsg {
+				t.Errorf("Expected error '%s', got: %v", tt.expectedMsg, err)
+			}
+		})
+	}
+}
+
+func TestValidateFlakeArgs_EmptyList(t *testing.T) {
+	config := &CampConfig{
+		Flakes: []Flake{
+			{
+				Name: "test-flake",
+				URL:  "github:user/flake",
+				Args: map[string]interface{}{
+					"emptyList": []interface{}{},
+				},
+				Outputs: []FlakeOutput{
+					{Name: "packages", Type: OutputTypeHome},
+				},
+			},
+		},
+	}
+
+	if err := config.ValidateFlakes(); err != nil {
+		t.Errorf("ValidateFlakes() should not error on empty list, got: %v", err)
+	}
+}
+
+func TestLoadConfig_WithFlakeArgs(t *testing.T) {
+	// Create temporary directory
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "camp.yml")
+
+	// Write YAML with flake args
+	yamlContent := `env:
+  EDITOR: nvim
+
+flakes:
+  - name: personal-config
+    url: "github:user/config"
+    args:
+      email: "test@example.com"
+      enableDevTools: true
+      fontSize: 14
+      packages:
+        - vim
+        - git
+        - tmux
+    outputs:
+      - name: darwinModules.default
+        type: system
+      - name: homeManagerModules.default
+        type: home
+`
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	// Load config
+	config, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() failed: %v", err)
+	}
+
+	// Verify flake args were loaded
+	if len(config.Flakes) != 1 {
+		t.Fatalf("Expected 1 flake, got %d", len(config.Flakes))
+	}
+
+	flake := config.Flakes[0]
+	if flake.Args == nil {
+		t.Fatal("Flake Args should not be nil")
+	}
+
+	// Check string arg
+	if email, ok := flake.Args["email"].(string); !ok || email != "test@example.com" {
+		t.Errorf("Expected email='test@example.com', got: %v", flake.Args["email"])
+	}
+
+	// Check bool arg
+	if enabled, ok := flake.Args["enableDevTools"].(bool); !ok || !enabled {
+		t.Errorf("Expected enableDevTools=true, got: %v", flake.Args["enableDevTools"])
+	}
+
+	// Check int arg
+	if fontSize, ok := flake.Args["fontSize"].(int); !ok || fontSize != 14 {
+		t.Errorf("Expected fontSize=14, got: %v", flake.Args["fontSize"])
+	}
+
+	// Check list arg
+	if packages, ok := flake.Args["packages"].([]interface{}); !ok {
+		t.Errorf("Expected packages to be a list, got: %T", flake.Args["packages"])
+	} else {
+		if len(packages) != 3 {
+			t.Errorf("Expected 3 packages, got %d", len(packages))
+		}
+		if pkg, ok := packages[0].(string); !ok || pkg != "vim" {
+			t.Errorf("Expected first package='vim', got: %v", packages[0])
+		}
+	}
+}
+
+func TestSaveAndLoadConfig_PreservesArgTypes(t *testing.T) {
+	// Create temporary directory
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "camp.yml")
+
+	// Create config with various arg types
+	config := &CampConfig{
+		Env: map[string]string{
+			"EDITOR": "nvim",
+		},
+		Flakes: []Flake{
+			{
+				Name: "test-flake",
+				URL:  "github:user/flake",
+				Args: map[string]interface{}{
+					"stringArg": "hello",
+					"boolArg":   true,
+					"intArg":    42,
+					"floatArg":  3.14,
+					"listArg":   []interface{}{"a", "b", "c"},
+				},
+				Outputs: []FlakeOutput{
+					{Name: "packages", Type: OutputTypeHome},
+				},
+			},
+		},
+	}
+
+	// Save config
+	if err := config.SaveConfig(configPath); err != nil {
+		t.Fatalf("SaveConfig() failed: %v", err)
+	}
+
+	// Load config
+	loadedConfig, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() failed: %v", err)
+	}
+
+	// Verify args were preserved with correct types
+	args := loadedConfig.Flakes[0].Args
+
+	if str, ok := args["stringArg"].(string); !ok || str != "hello" {
+		t.Errorf("String arg not preserved correctly: %v (%T)", args["stringArg"], args["stringArg"])
+	}
+
+	if b, ok := args["boolArg"].(bool); !ok || !b {
+		t.Errorf("Bool arg not preserved correctly: %v (%T)", args["boolArg"], args["boolArg"])
+	}
+
+	if i, ok := args["intArg"].(int); !ok || i != 42 {
+		t.Errorf("Int arg not preserved correctly: %v (%T)", args["intArg"], args["intArg"])
+	}
+
+	if f, ok := args["floatArg"].(float64); !ok || f != 3.14 {
+		t.Errorf("Float arg not preserved correctly: %v (%T)", args["floatArg"], args["floatArg"])
+	}
+
+	if list, ok := args["listArg"].([]interface{}); !ok || len(list) != 3 {
+		t.Errorf("List arg not preserved correctly: %v (%T)", args["listArg"], args["listArg"])
+	}
+}
