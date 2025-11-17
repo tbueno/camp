@@ -30,7 +30,7 @@
     dotDir = "${config.home.homeDirectory}/.camp";
 
     # Source user's original .zshrc after camp's config loads
-    initExtra = ''
+    initContent = ''
       [ -f ~/.zshrc ] && source ~/.zshrc
     '';
   };
