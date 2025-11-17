@@ -255,3 +255,220 @@ func TestRenderFlakeTemplate_CreatesDirectory(t *testing.T) {
 		t.Error("Rendered template should contain env vars")
 	}
 }
+
+// Flake template tests
+
+func TestNewTemplateData_WithFlakes(t *testing.T) {
+	user := &User{
+		Name:         "testuser",
+		HostName:     "testhost",
+		Platform:     "darwin",
+		Architecture: "arm64",
+		HomeDir:      "/Users/testuser",
+		EnvVars:      make(map[string]string),
+		Flakes: []Flake{
+			{
+				Name: "my-flake",
+				URL:  "github:user/repo",
+				Follows: map[string]string{
+					"nixpkgs": "nixpkgs",
+				},
+				Outputs: []FlakeOutput{
+					{Name: "packages", Type: OutputTypeHome},
+				},
+			},
+		},
+	}
+
+	data := NewTemplateData(user)
+
+	if len(data.Flakes) != 1 {
+		t.Fatalf("Expected 1 flake, got %d", len(data.Flakes))
+	}
+
+	if data.Flakes[0].Name != "my-flake" {
+		t.Errorf("Expected flake name=my-flake, got %s", data.Flakes[0].Name)
+	}
+
+	if data.Flakes[0].URL != "github:user/repo" {
+		t.Errorf("Expected flake URL=github:user/repo, got %s", data.Flakes[0].URL)
+	}
+}
+
+func TestCompileTemplate_WithFlakes(t *testing.T) {
+	// Create temporary directory
+	tmpDir := t.TempDir()
+	templatePath := filepath.Join(tmpDir, "test.tmpl")
+
+	// Write template with flakes iteration
+	templateContent := `{{range .Flakes}}flake: {{.Name}} url: {{.URL}}
+{{end}}`
+	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
+		t.Fatalf("Failed to write template: %v", err)
+	}
+
+	// Create template data with flakes
+	data := &TemplateData{
+		Flakes: []Flake{
+			{Name: "flake1", URL: "github:user/flake1"},
+			{Name: "flake2", URL: "github:user/flake2"},
+		},
+	}
+
+	// Compile template
+	result, err := CompileTemplate(templatePath, data)
+	if err != nil {
+		t.Fatalf("CompileTemplate() failed: %v", err)
+	}
+
+	// Check that both flakes are present
+	resultStr := string(result)
+	if !strings.Contains(resultStr, "flake: flake1") {
+		t.Error("Expected flake1 in result")
+	}
+	if !strings.Contains(resultStr, "url: github:user/flake1") {
+		t.Error("Expected flake1 URL in result")
+	}
+	if !strings.Contains(resultStr, "flake: flake2") {
+		t.Error("Expected flake2 in result")
+	}
+}
+
+func TestCompileTemplate_WithFlakeOutputs(t *testing.T) {
+	// Create temporary directory
+	tmpDir := t.TempDir()
+	templatePath := filepath.Join(tmpDir, "test.tmpl")
+
+	// Write template with flake outputs iteration
+	templateContent := `{{range $flake := .Flakes}}{{range .Outputs}}{{$flake.Name}}.{{.Name}} type={{.Type}}
+{{end}}{{end}}`
+	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
+		t.Fatalf("Failed to write template: %v", err)
+	}
+
+	// Create template data with flakes and outputs
+	data := &TemplateData{
+		Flakes: []Flake{
+			{
+				Name: "my-flake",
+				URL:  "github:user/repo",
+				Outputs: []FlakeOutput{
+					{Name: "packages", Type: OutputTypeHome},
+					{Name: "homeManagerModules.default", Type: OutputTypeHome},
+				},
+			},
+		},
+	}
+
+	// Compile template
+	result, err := CompileTemplate(templatePath, data)
+	if err != nil {
+		t.Fatalf("CompileTemplate() failed: %v", err)
+	}
+
+	// Check that outputs are present
+	resultStr := string(result)
+	if !strings.Contains(resultStr, "my-flake.packages") {
+		t.Error("Expected my-flake.packages in result")
+	}
+	if !strings.Contains(resultStr, "type=home") {
+		t.Error("Expected type=home in result")
+	}
+	if !strings.Contains(resultStr, "my-flake.homeManagerModules.default") {
+		t.Error("Expected my-flake.homeManagerModules.default in result")
+	}
+}
+
+func TestCompileTemplate_WithFlakeFollows(t *testing.T) {
+	// Create temporary directory
+	tmpDir := t.TempDir()
+	templatePath := filepath.Join(tmpDir, "test.tmpl")
+
+	// Write template with follows iteration
+	templateContent := `{{range .Flakes}}{{range $key, $value := .Follows}}{{$key}}={{$value}}
+{{end}}{{end}}`
+	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
+		t.Fatalf("Failed to write template: %v", err)
+	}
+
+	// Create template data with follows
+	data := &TemplateData{
+		Flakes: []Flake{
+			{
+				Name: "my-flake",
+				URL:  "github:user/repo",
+				Follows: map[string]string{
+					"nixpkgs":      "nixpkgs",
+					"home-manager": "home-manager",
+				},
+			},
+		},
+	}
+
+	// Compile template
+	result, err := CompileTemplate(templatePath, data)
+	if err != nil {
+		t.Fatalf("CompileTemplate() failed: %v", err)
+	}
+
+	// Check that follows are present
+	resultStr := string(result)
+	if !strings.Contains(resultStr, "nixpkgs=nixpkgs") {
+		t.Error("Expected nixpkgs=nixpkgs in result")
+	}
+	if !strings.Contains(resultStr, "home-manager=home-manager") {
+		t.Error("Expected home-manager=home-manager in result")
+	}
+}
+
+func TestCompileTemplate_WithSystemAndHomeOutputs(t *testing.T) {
+	// Create temporary directory
+	tmpDir := t.TempDir()
+	templatePath := filepath.Join(tmpDir, "test.tmpl")
+
+	// Write template that filters by output type
+	templateContent := `System outputs:
+{{range $flake := .Flakes}}{{range .Outputs}}{{if eq .Type "system"}}{{$flake.Name}}.{{.Name}}
+{{end}}{{end}}{{end}}
+Home outputs:
+{{range $flake := .Flakes}}{{range .Outputs}}{{if eq .Type "home"}}{{$flake.Name}}.{{.Name}}
+{{end}}{{end}}{{end}}`
+	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
+		t.Fatalf("Failed to write template: %v", err)
+	}
+
+	// Create template data with mixed output types
+	data := &TemplateData{
+		Flakes: []Flake{
+			{
+				Name: "flake1",
+				URL:  "github:user/flake1",
+				Outputs: []FlakeOutput{
+					{Name: "darwinModules.team", Type: OutputTypeSystem},
+					{Name: "packages", Type: OutputTypeHome},
+				},
+			},
+		},
+	}
+
+	// Compile template
+	result, err := CompileTemplate(templatePath, data)
+	if err != nil {
+		t.Fatalf("CompileTemplate() failed: %v", err)
+	}
+
+	// Check that outputs are in correct sections
+	resultStr := string(result)
+
+	// System outputs section should have darwinModules.team
+	systemSection := strings.Split(resultStr, "Home outputs:")[0]
+	if !strings.Contains(systemSection, "flake1.darwinModules.team") {
+		t.Error("Expected flake1.darwinModules.team in system outputs section")
+	}
+
+	// Home outputs section should have packages
+	homeSection := strings.Split(resultStr, "Home outputs:")[1]
+	if !strings.Contains(homeSection, "flake1.packages") {
+		t.Error("Expected flake1.packages in home outputs section")
+	}
+}
