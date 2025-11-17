@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/template"
 )
 
@@ -32,6 +33,37 @@ func NewTemplateData(user *User) *TemplateData {
 	}
 }
 
+// renderNixValue converts a Go value to its Nix syntax representation
+func renderNixValue(value interface{}) string {
+	switch v := value.(type) {
+	case string:
+		// Escape special characters in strings
+		escaped := strings.ReplaceAll(v, "\\", "\\\\")
+		escaped = strings.ReplaceAll(escaped, "\"", "\\\"")
+		escaped = strings.ReplaceAll(escaped, "\n", "\\n")
+		return fmt.Sprintf("\"%s\"", escaped)
+	case bool:
+		if v {
+			return "true"
+		}
+		return "false"
+	case int, int64:
+		return fmt.Sprintf("%d", v)
+	case float64:
+		return fmt.Sprintf("%g", v)
+	case []interface{}:
+		// Render list elements
+		var elements []string
+		for _, elem := range v {
+			elements = append(elements, renderNixValue(elem))
+		}
+		return fmt.Sprintf("[ %s ]", strings.Join(elements, " "))
+	default:
+		// Fallback for unsupported types (should be caught by validation)
+		return fmt.Sprintf("\"%v\"", v)
+	}
+}
+
 // CompileTemplate parses and renders a template file with the given data
 func CompileTemplate(templatePath string, data *TemplateData) ([]byte, error) {
 	// Read template file
@@ -40,8 +72,13 @@ func CompileTemplate(templatePath string, data *TemplateData) ([]byte, error) {
 		return nil, fmt.Errorf("failed to read template file: %w", err)
 	}
 
+	// Create template with custom functions
+	funcMap := template.FuncMap{
+		"renderNixValue": renderNixValue,
+	}
+
 	// Parse template
-	tmpl, err := template.New(filepath.Base(templatePath)).Parse(string(templateContent))
+	tmpl, err := template.New(filepath.Base(templatePath)).Funcs(funcMap).Parse(string(templateContent))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse template: %w", err)
 	}

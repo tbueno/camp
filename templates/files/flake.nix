@@ -72,7 +72,14 @@
           {{- range $flake := .Flakes }}
             {{- range .Outputs }}
               {{- if eq .Type "system" }}
-          {{ $flake.Name }}.{{ .Name }}
+          ({{ $flake.Name }}.{{ .Name }} {
+            userName = "{{ $.Name }}";
+            hostName = "{{ $.HostName }}";
+            home = "{{ $.HomeDir }}";
+            {{- range $key, $value := $flake.Args }}
+            {{ $key }} = {{ renderNixValue $value }};
+            {{- end }}
+          })
               {{- end }}
             {{- end }}
           {{- end }}
@@ -88,7 +95,14 @@
                 {{- range $flake := .Flakes }}
                   {{- range .Outputs }}
                     {{- if eq .Type "home" }}
-                {{ $flake.Name }}.{{ .Name }}
+                ({{ $flake.Name }}.{{ .Name }} {
+                  userName = "{{ $.Name }}";
+                  hostName = "{{ $.HostName }}";
+                  home = "{{ $.HomeDir }}";
+                  {{- range $key, $value := $flake.Args }}
+                  {{ $key }} = {{ renderNixValue $value }};
+                  {{- end }}
+                })
                     {{- end }}
                   {{- end }}
                 {{- end }}
@@ -119,7 +133,14 @@
           {{- range $flake := .Flakes }}
             {{- range .Outputs }}
               {{- if eq .Type "home" }}
-          {{ $flake.Name }}.{{ .Name }}
+          ({{ $flake.Name }}.{{ .Name }} {
+            userName = "{{ $.Name }}";
+            hostName = "{{ $.HostName }}";
+            home = "{{ $.HomeDir }}";
+            {{- range $key, $value := $flake.Args }}
+            {{ $key }} = {{ renderNixValue $value }};
+            {{- end }}
+          })
               {{- end }}
             {{- end }}
           {{- end }}
