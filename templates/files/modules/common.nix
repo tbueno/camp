@@ -27,7 +27,7 @@
   # Enable zsh management with dotDir approach
   programs.zsh = {
     enable = true;
-    dotDir = ".camp";
+    dotDir = "${config.home.homeDirectory}/.camp";
 
     # Source user's original .zshrc after camp's config loads
     initExtra = ''
