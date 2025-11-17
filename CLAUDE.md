@@ -264,6 +264,263 @@ When writing rebuild tests:
 - Mock external command execution (nix, home-manager)
 - Test error conditions (missing directories, unsupported platforms)
 
+## Flake System
+
+Camp supports integrating external Nix flakes to extend your development environment with custom packages, configurations, and modules.
+
+### What are Flakes?
+
+Flakes are a standardized way to package and share Nix configurations. They provide:
+- **Reproducible dependencies** with lock files
+- **Standardized structure** for packages and modules
+- **Version pinning** for consistent environments
+
+### Configuration
+
+Define flakes in `~/.camp/camp.yml`:
+
+```yaml
+env:
+  EDITOR: nvim
+
+flakes:
+  - name: my-tools              # Unique identifier
+    url: "github:user/my-tools" # Flake location
+    follows:                    # Optional: input overrides
+      nixpkgs: "nixpkgs"
+    outputs:                    # What to import
+      - name: packages
+        type: home              # "home" or "system"
+```
+
+### Flake Types
+
+**FlakeOutputType**: Defines where a flake output is applied
+- `FlakeOutputType = "system"` - System-level (nix-darwin, macOS only)
+- `FlakeOutputType = "home"` - User-level (home-manager, macOS/Linux)
+
+**Flake Structure**:
+```go
+type Flake struct {
+    Name    string            // Unique identifier
+    URL     string            // Flake URL (github:, git+ssh:, path:, etc.)
+    Follows map[string]string // Input dependency overrides
+    Outputs []FlakeOutput     // Which outputs to import
+}
+
+type FlakeOutput struct {
+    Name string          // Output name (e.g., "packages", "homeManagerModules.default")
+    Type FlakeOutputType // Where to apply: "system" or "home"
+}
+```
+
+### Supported URL Formats
+
+```yaml
+# GitHub (public)
+url: "github:username/repository"
+url: "github:username/repository/branch-name"
+
+# GitHub (private via SSH)
+url: "git+ssh://git@github.com/company/private-repo.git"
+
+# GitLab
+url: "gitlab:username/repository"
+
+# Local path (for development)
+url: "path:/absolute/path/to/flake"
+
+# Generic Git
+url: "git+https://git.example.com/repo.git"
+```
+
+### How It Works
+
+1. **User Configuration**: Define flakes in `~/.camp/camp.yml`
+2. **Validation**: `ValidateFlakes()` checks for errors (unique names, valid URLs, etc.)
+3. **Template Rendering**: Flakes are dynamically injected into generated `flake.nix`
+4. **Nix Integration**: System applies flake outputs during rebuild
+
+**Template Generation Flow**:
+```
+User edits ~/.camp/camp.yml
+         ↓
+LoadConfig() + ValidateFlakes()
+         ↓
+User.Reload() loads flakes
+         ↓
+CompileTemplates() renders flake.nix with:
+  - Flake inputs section
+  - Flake outputs in function signature
+  - System outputs → nix-darwin modules
+  - Home outputs → home-manager modules
+         ↓
+ExecuteRebuild() applies configuration
+```
+
+### Commands
+
+**Rebuild with flakes**:
+```bash
+camp env rebuild
+```
+Integrates all defined flakes into your environment.
+
+**Update flake dependencies**:
+```bash
+camp env update
+```
+Updates `flake.lock` with latest versions of all flake inputs.
+
+### Validation Rules
+
+The system validates flakes to prevent errors:
+
+- **Unique names**: No duplicate flake names allowed
+- **Valid Nix identifiers**: Names must be alphanumeric with hyphens/underscores only
+- **Non-empty URLs**: Every flake must have a URL
+- **Valid output types**: Must be "system" or "home"
+- **At least one output**: Each flake must define outputs to import
+
+**Example validation error**:
+```
+Error: duplicate flake name 'my-flake' - flake names must be unique
+```
+
+### Template Integration
+
+Flakes are injected into `templates/files/flake.nix`:
+
+**Inputs section**:
+```nix
+inputs = {
+  nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+
+  # User-defined flakes
+  {{- range .Flakes }}
+  {{ .Name }} = {
+    url = "{{ .URL }}";
+    {{- range $key, $value := .Follows }}
+    inputs.{{ $key }}.follows = "{{ $value }}";
+    {{- end }}
+  };
+  {{- end }}
+};
+```
+
+**System outputs** (nix-darwin, macOS):
+```nix
+modules = [
+  ./mac.nix
+
+  # Custom system-level flake modules
+  {{- range $flake := .Flakes }}
+    {{- range .Outputs }}
+      {{- if eq .Type "system" }}
+  {{ $flake.Name }}.{{ .Name }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+];
+```
+
+**Home outputs** (home-manager, macOS/Linux):
+```nix
+home-manager.users.${user} = {
+  imports = [
+    ./modules/common.nix
+
+    # Custom home-level flake modules
+    {{- range $flake := .Flakes }}
+      {{- range .Outputs }}
+        {{- if eq .Type "home" }}
+    {{ $flake.Name }}.{{ .Name }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+  ];
+};
+```
+
+### Example Use Cases
+
+**Personal packages**:
+```yaml
+flakes:
+  - name: my-packages
+    url: "github:username/nix-packages"
+    follows:
+      nixpkgs: "nixpkgs"
+    outputs:
+      - name: packages
+        type: home
+```
+
+**Team configuration**:
+```yaml
+flakes:
+  - name: company-tools
+    url: "git+ssh://git@github.com/company/nix-tools.git"
+    outputs:
+      - name: darwinModules.company
+        type: system
+      - name: homeManagerModules.company
+        type: home
+```
+
+**Local development**:
+```yaml
+flakes:
+  - name: local-test
+    url: "path:/Users/me/projects/test-flake"
+    outputs:
+      - name: packages
+        type: home
+```
+
+### Testing Flakes
+
+When writing flake tests:
+- Use temporary directories for config files
+- Create test flakes with valid YAML
+- Verify validation catches errors
+- Test template rendering with flakes
+- Verify system vs home output routing
+- Test integration with PrepareEnvironment()
+
+**Example test structure**:
+```go
+func TestFlakeIntegration(t *testing.T) {
+    // Create config with flakes
+    config := &CampConfig{
+        Flakes: []Flake{
+            {
+                Name: "test-flake",
+                URL:  "github:test/flake",
+                Outputs: []FlakeOutput{
+                    {Name: "packages", Type: OutputTypeHome},
+                },
+            },
+        },
+    }
+
+    // Validate
+    if err := config.ValidateFlakes(); err != nil {
+        t.Errorf("Validation failed: %v", err)
+    }
+
+    // Render template and verify output
+    // ...
+}
+```
+
+### Example Templates
+
+See `templates/flakes/` for ready-to-use examples:
+- `personal-packages.yml` - Personal development tools
+- `team-tools.yml` - Organization-wide configurations
+- `README.md` - Comprehensive guide with all URL formats
+
 ## Current Commands
 
 To see a list of available commands, run:

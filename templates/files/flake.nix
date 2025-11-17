@@ -12,9 +12,19 @@
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    # Custom user-defined flakes
+    {{- range .Flakes }}
+    {{ .Name }} = {
+      url = "{{ .URL }}";
+      {{- range $key, $value := .Follows }}
+      inputs.{{ $key }}.follows = "{{ $value }}";
+      {{- end }}
+    };
+    {{- end }}
   };
 
-  outputs = { self, nix-darwin, nixpkgs, nixpkgs-unstable, home-manager, ... }:
+  outputs = { self, nix-darwin, nixpkgs, nixpkgs-unstable, home-manager, {{ range .Flakes }}{{ .Name }}, {{ end }}... }:
   let
     configuration = { pkgs, ... }: {
       # not needed. They will be read from external files.
@@ -58,12 +68,30 @@
         modules = [
           ./mac.nix
 
+          # Custom system-level flake modules (nix-darwin)
+          {{- range $flake := .Flakes }}
+            {{- range .Outputs }}
+              {{- if eq .Type "system" }}
+          {{ $flake.Name }}.{{ .Name }}
+              {{- end }}
+            {{- end }}
+          {{- end }}
+
           home-manager.darwinModules.home-manager {
             home-manager.useGlobalPkgs = true;
             home-manager.useUserPackages = true;
             home-manager.users.${user} = {
               imports = [
                 ./modules/common.nix
+
+                # Custom home-level flake modules
+                {{- range $flake := .Flakes }}
+                  {{- range .Outputs }}
+                    {{- if eq .Type "home" }}
+                {{ $flake.Name }}.{{ .Name }}
+                    {{- end }}
+                  {{- end }}
+                {{- end }}
               ];
             };
             home-manager.extraSpecialArgs = specialArgs;
@@ -86,6 +114,15 @@
 
         modules = [
           ./linux.nix
+
+          # Custom home-level flake modules
+          {{- range $flake := .Flakes }}
+            {{- range .Outputs }}
+              {{- if eq .Type "home" }}
+          {{ $flake.Name }}.{{ .Name }}
+              {{- end }}
+            {{- end }}
+          {{- end }}
         ];
       };
     } else null;

@@ -1,0 +1,55 @@
+# Example: Team/Organization Tools Flake
+#
+# This example shows how to integrate organization-wide tools and configurations
+# shared across your team. This is useful for:
+# - Company-specific tools and scripts
+# - Shared development environment configurations
+# - Team coding standards and linters
+#
+# Copy this section to your ~/.camp/camp.yml and customize for your organization.
+
+env:
+  COMPANY_API_URL: "https://api.company.com"
+  PROJECT_ROOT: "/Users/me/projects"
+
+flakes:
+  # Company-wide tools (via private GitHub repo)
+  - name: company-tools
+    url: "git+ssh://git@github.com/company/nix-tools.git"
+
+    # Use the same nixpkgs version for consistency
+    follows:
+      nixpkgs: "nixpkgs"
+
+    outputs:
+      # macOS: Import system-level configuration (requires nix-darwin)
+      # This might include system-wide settings, fonts, or services
+      - name: darwinModules.company
+        type: system
+
+      # All platforms: Import home-manager configuration
+      # This might include aliases, shell configs, or development tools
+      - name: homeManagerModules.company
+        type: home
+
+  # Team-specific development environment
+  - name: team-dev-env
+    url: "git+ssh://git@github.com/company/team-dev-flake.git"
+    outputs:
+      # Import team packages (linters, formatters, build tools)
+      - name: packages
+        type: home
+
+      # Import team shell configuration
+      - name: homeManagerModules.shell
+        type: home
+
+# After adding to ~/.camp/camp.yml:
+# 1. Ensure you have SSH access to the private repositories
+# 2. Run: camp env rebuild
+# 3. Team tools will be available in your environment
+# 4. Keep tools updated: camp env update
+
+# Note: For private repositories, you may need to configure SSH keys:
+# - GitHub: https://docs.github.com/en/authentication/connecting-to-github-with-ssh
+# - GitLab: https://docs.gitlab.com/ee/user/ssh.html

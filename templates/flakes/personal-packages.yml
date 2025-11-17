@@ -1,0 +1,42 @@
+# Example: Personal Packages Flake
+#
+# This example shows how to integrate a personal flake containing your custom
+# packages and configurations. Copy this section to your ~/.camp/camp.yml file
+# and customize it for your needs.
+
+env:
+  EDITOR: nvim
+  BROWSER: firefox
+
+flakes:
+  # Personal packages flake from GitHub
+  - name: my-packages
+    url: "github:username/nix-packages"
+
+    # Optional: Ensure this flake uses the same nixpkgs version as camp
+    follows:
+      nixpkgs: "nixpkgs"
+
+    # Define which outputs to import
+    outputs:
+      # Import packages into home environment
+      - name: packages
+        type: home
+
+      # Import home-manager module
+      - name: homeManagerModules.default
+        type: home
+
+  # Another example: Personal dotfiles flake
+  - name: my-dotfiles
+    url: "github:username/dotfiles-flake"
+    follows:
+      nixpkgs: "nixpkgs"
+    outputs:
+      - name: homeManagerModules.dotfiles
+        type: home
+
+# After adding to ~/.camp/camp.yml:
+# 1. Run: camp env rebuild
+# 2. Your personal packages will be available in your environment
+# 3. Update with: camp env update
