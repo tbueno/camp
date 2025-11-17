@@ -3,6 +3,7 @@ package system
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -323,5 +324,109 @@ func TestCopyDir(t *testing.T) {
 	}
 	if string(content1) != "content1" {
 		t.Error("Copied file1 content doesn't match")
+	}
+}
+
+// Integration test for flakes
+
+func TestPrepareEnvironment_WithFlakes(t *testing.T) {
+	// Skip if template files don't exist
+	if _, err := os.Stat("templates/files/flake.nix"); os.IsNotExist(err) {
+		t.Skip("Skipping test: flake.nix template not found")
+	}
+
+	// Create temporary home directory
+	tmpHome := t.TempDir()
+
+	// Create .camp directory and config with flakes
+	campDir := filepath.Join(tmpHome, ".camp")
+	if err := os.MkdirAll(campDir, 0755); err != nil {
+		t.Fatalf("Failed to create .camp directory: %v", err)
+	}
+
+	configPath := filepath.Join(campDir, "camp.yml")
+	configContent := `env:
+  EDITOR: nvim
+
+flakes:
+  - name: test-flake
+    url: "github:test/flake"
+    follows:
+      nixpkgs: "nixpkgs"
+    outputs:
+      - name: packages
+        type: home
+      - name: darwinModules.test
+        type: system
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to write config: %v", err)
+	}
+
+	// Create user
+	user := &User{
+		Name:         "testuser",
+		HostName:     "testhost",
+		Platform:     "darwin",
+		Architecture: "arm64",
+		HomeDir:      tmpHome,
+		EnvVars:      make(map[string]string),
+		Flakes:       []Flake{},
+	}
+
+	// Run PrepareEnvironment
+	if err := PrepareEnvironment(user); err != nil {
+		t.Fatalf("PrepareEnvironment() failed: %v", err)
+	}
+
+	// Verify flake.nix was created
+	flakePath := filepath.Join(tmpHome, ".camp", "nix", "flake.nix")
+	if _, err := os.Stat(flakePath); os.IsNotExist(err) {
+		t.Fatal("PrepareEnvironment() should create flake.nix")
+	}
+
+	// Read generated flake.nix
+	content, err := os.ReadFile(flakePath)
+	if err != nil {
+		t.Fatalf("Failed to read generated flake.nix: %v", err)
+	}
+
+	contentStr := string(content)
+
+	// Verify flake is in inputs section
+	if !strings.Contains(contentStr, "test-flake = {") {
+		t.Error("Generated flake.nix should contain test-flake in inputs")
+	}
+
+	if !strings.Contains(contentStr, `url = "github:test/flake";`) {
+		t.Error("Generated flake.nix should contain flake URL")
+	}
+
+	if !strings.Contains(contentStr, `inputs.nixpkgs.follows = "nixpkgs";`) {
+		t.Error("Generated flake.nix should contain follows declaration")
+	}
+
+	// Verify flake is in outputs function signature
+	if !strings.Contains(contentStr, "test-flake,") {
+		t.Error("Generated flake.nix should include test-flake in outputs signature")
+	}
+
+	// Verify system-level output is injected into darwin modules
+	if !strings.Contains(contentStr, "test-flake.darwinModules.test") {
+		t.Error("Generated flake.nix should inject system output into darwin modules")
+	}
+
+	// Verify home-level output is injected into home-manager modules
+	if !strings.Contains(contentStr, "test-flake.packages") {
+		t.Error("Generated flake.nix should inject home output into home-manager modules")
+	}
+
+	// Verify user data is present
+	if !strings.Contains(contentStr, "testuser") {
+		t.Error("Generated flake.nix should contain username")
+	}
+
+	if !strings.Contains(contentStr, "testhost") {
+		t.Error("Generated flake.nix should contain hostname")
 	}
 }
