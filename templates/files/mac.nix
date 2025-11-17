@@ -10,5 +10,4 @@
   nix.nixPath = [];  # Disable channel lookups (using flakes instead)
   system.stateVersion = 5;
   nixpkgs.hostPlatform = "aarch64-darwin";
-  system.primaryUser = user;
 }
