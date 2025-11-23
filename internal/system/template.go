@@ -17,6 +17,7 @@ type TemplateData struct {
 	Architecture string            // CPU arch (amd64/arm64)
 	HomeDir      string            // User's home directory
 	EnvVars      map[string]string // Custom environment variables
+	Packages     []string          // Nix packages to install
 	Flakes       []Flake           // External Nix flakes to integrate
 }
 
@@ -29,6 +30,7 @@ func NewTemplateData(user *User) *TemplateData {
 		Architecture: user.Architecture,
 		HomeDir:      user.HomeDir,
 		EnvVars:      user.EnvVars,
+		Packages:     user.Packages,
 		Flakes:       user.Flakes,
 	}
 }

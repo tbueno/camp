@@ -52,6 +52,11 @@
         "{{ $key }}" = "{{ $value }}";
         {{- end }}
       };
+      customPackages = [
+        {{- range .Packages }}
+        "{{ . }}"
+        {{- end }}
+      ];
     };
 
   in
@@ -59,13 +64,15 @@
     # macOS setup using nix-darwin (only if isDarwin is true)
     darwinConfigurations = if isDarwin then {
       ${hostName} = nix-darwin.lib.darwinSystem {
-        inherit specialArgs;
-        system = {
-          configurationRevision = self.rev or self.dirtyRev or null;
-          checks.verifyNixPath = false;
-        };
-
+        inherit specialArgs system;
         modules = [
+          {
+            # Set Git commit hash for darwin-version
+            system.configurationRevision = self.rev or self.dirtyRev or null;
+            # Disable Nix path verification
+            system.checks.verifyNixPath = false;
+          }
+
           ./mac.nix
 
           # Custom system-level flake modules (nix-darwin)

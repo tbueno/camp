@@ -1,0 +1,99 @@
+# Parameterized Flake Example
+#
+# This example demonstrates how to pass arguments to external flakes,
+# allowing you to create reusable, configurable Nix modules.
+#
+# Copy this to ~/.camp/camp.yml and customize the args for your setup.
+
+env:
+  EDITOR: nvim
+
+flakes:
+  # Personal development environment with parameterized configuration
+  - name: personal-config
+    url: "github:username/nix-config"
+
+    # Arguments passed to this flake's outputs
+    # Types are inferred from YAML: string, bool, number, list
+    args:
+      # String arguments
+      email: "user@example.com"
+      gitSigningKey: "ABCD1234"
+
+      # Boolean flags
+      enableDevTools: true
+      enableGaming: false
+      useGnuPG: true
+
+      # Numeric configuration
+      fontSize: 14
+      terminalOpacity: 0.95
+      maxJobs: 8
+
+      # Lists (can contain strings, numbers, or booleans)
+      packages: [vim, git, tmux, ripgrep, fd, bat]
+      pythonVersions: [3.11, 3.12]
+      ports: [8080, 3000, 5432]
+      enabledShells: [zsh, bash, fish]
+
+    outputs:
+      - name: darwinModules.default
+        type: system
+      - name: homeManagerModules.default
+        type: home
+
+  # Team configuration with different arguments
+  - name: company-tools
+    url: "git+ssh://git@github.com/company/nix-tools.git"
+
+    args:
+      companyDomain: "example.com"
+      vpnEndpoint: "vpn.example.com"
+      enableMonitoring: true
+      slackWebhook: "https://hooks.slack.com/services/..."
+
+    outputs:
+      - name: darwinModules.company
+        type: system
+      - name: homeManagerModules.company
+        type: home
+
+  # Local development flake (for testing)
+  - name: local-dev
+    url: "path:/Users/username/dev/my-flake"
+
+    args:
+      environment: "development"
+      debugMode: true
+      logLevel: "debug"
+
+    outputs:
+      - name: homeManagerModules.dev
+        type: home
+
+# Automatic Arguments (always passed, no need to define):
+# - userName: Your system username (from User.Name)
+# - hostName: Your machine hostname (from User.HostName)
+# - home: Your home directory path (from User.HomeDir)
+#
+# These are automatically available in your flake modules.
+
+# Your external flake should define modules as functions:
+#
+# darwinModules.default = {
+#   userName,      # automatic
+#   hostName,      # automatic
+#   home,          # automatic
+#   email,         # from args
+#   enableDevTools,# from args
+#   fontSize,      # from args
+#   packages,      # from args
+#   ...            # catch remaining args
+# }@args: {
+#   # Use the arguments in your configuration
+#   networking.hostName = hostName;
+#   users.users.${userName}.description = email;
+#
+#   environment.systemPackages = with pkgs;
+#     packages ++ (if enableDevTools then [ gcc cmake ] else []);
+# };

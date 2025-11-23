@@ -763,3 +763,191 @@ func TestCompileTemplate_FlakeWithArgs(t *testing.T) {
 		t.Errorf("Expected userName to appear twice (system + home), got %d occurrences", strings.Count(resultStr, `userName = "testuser";`))
 	}
 }
+
+// ============================================================================
+// Package Template Tests
+// ============================================================================
+
+func TestNewTemplateData_WithPackages(t *testing.T) {
+	user := &User{
+		Name:         "testuser",
+		HostName:     "testhost",
+		Platform:     "darwin",
+		Architecture: "arm64",
+		HomeDir:      "/Users/testuser",
+		EnvVars:      make(map[string]string),
+		Packages:     []string{"git", "neovim", "ripgrep"},
+		Flakes:       []Flake{},
+	}
+
+	data := NewTemplateData(user)
+
+	if len(data.Packages) != 3 {
+		t.Fatalf("Expected 3 packages, got %d", len(data.Packages))
+	}
+
+	if data.Packages[0] != "git" {
+		t.Errorf("Expected package[0]=git, got %s", data.Packages[0])
+	}
+
+	if data.Packages[1] != "neovim" {
+		t.Errorf("Expected package[1]=neovim, got %s", data.Packages[1])
+	}
+
+	if data.Packages[2] != "ripgrep" {
+		t.Errorf("Expected package[2]=ripgrep, got %s", data.Packages[2])
+	}
+}
+
+func TestNewTemplateData_WithEmptyPackages(t *testing.T) {
+	user := &User{
+		Name:         "testuser",
+		HostName:     "testhost",
+		Platform:     "darwin",
+		Architecture: "arm64",
+		HomeDir:      "/Users/testuser",
+		EnvVars:      make(map[string]string),
+		Packages:     []string{},
+		Flakes:       []Flake{},
+	}
+
+	data := NewTemplateData(user)
+
+	if data.Packages == nil {
+		t.Error("NewTemplateData() should preserve empty Packages slice")
+	}
+
+	if len(data.Packages) != 0 {
+		t.Errorf("Expected 0 packages, got %d", len(data.Packages))
+	}
+}
+
+func TestCompileTemplate_WithPackages(t *testing.T) {
+	tmpDir := t.TempDir()
+	templatePath := filepath.Join(tmpDir, "test.tmpl")
+
+	templateContent := `customPackages = [
+{{- range .Packages }}
+  "{{ . }}"
+{{- end }}
+];`
+	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
+		t.Fatalf("Failed to write template: %v", err)
+	}
+
+	data := &TemplateData{
+		Packages: []string{"git", "neovim", "ripgrep"},
+	}
+
+	result, err := CompileTemplate(templatePath, data)
+	if err != nil {
+		t.Fatalf("CompileTemplate() failed: %v", err)
+	}
+
+	resultStr := string(result)
+	if !strings.Contains(resultStr, `"git"`) {
+		t.Error("Expected 'git' in result")
+	}
+	if !strings.Contains(resultStr, `"neovim"`) {
+		t.Error("Expected 'neovim' in result")
+	}
+	if !strings.Contains(resultStr, `"ripgrep"`) {
+		t.Error("Expected 'ripgrep' in result")
+	}
+}
+
+func TestCompileTemplate_WithEmptyPackages(t *testing.T) {
+	tmpDir := t.TempDir()
+	templatePath := filepath.Join(tmpDir, "test.tmpl")
+
+	templateContent := `customPackages = [
+{{- range .Packages }}
+  "{{ . }}"
+{{- end }}
+];`
+	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
+		t.Fatalf("Failed to write template: %v", err)
+	}
+
+	data := &TemplateData{
+		Packages: []string{},
+	}
+
+	result, err := CompileTemplate(templatePath, data)
+	if err != nil {
+		t.Fatalf("CompileTemplate() failed: %v", err)
+	}
+
+	resultStr := string(result)
+	expected := "customPackages = [\n];"
+	if resultStr != expected {
+		t.Errorf("Expected %q, got %q", expected, resultStr)
+	}
+}
+
+func TestCompileTemplate_PackagesInFlakeTemplate(t *testing.T) {
+	tmpDir := t.TempDir()
+	templatePath := filepath.Join(tmpDir, "flake.nix")
+
+	// Simplified flake template with packages in specialArgs
+	templateContent := `{
+  outputs = { ... }:
+  let
+    specialArgs = {
+      inherit hostName user usersPath;
+      customEnvVars = {
+        {{- range $key, $value := .EnvVars }}
+        "{{ $key }}" = "{{ $value }}";
+        {{- end }}
+      };
+      customPackages = [
+        {{- range .Packages }}
+        "{{ . }}"
+        {{- end }}
+      ];
+    };
+  in
+  {
+    # Configuration using specialArgs
+  };
+}`
+	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
+		t.Fatalf("Failed to write template: %v", err)
+	}
+
+	data := &TemplateData{
+		Name:     "testuser",
+		HostName: "testhost",
+		HomeDir:  "/Users/testuser",
+		EnvVars: map[string]string{
+			"EDITOR": "nvim",
+		},
+		Packages: []string{"git", "neovim", "python3"},
+	}
+
+	result, err := CompileTemplate(templatePath, data)
+	if err != nil {
+		t.Fatalf("CompileTemplate() failed: %v", err)
+	}
+
+	resultStr := string(result)
+
+	// Verify packages are in customPackages array
+	if !strings.Contains(resultStr, "customPackages = [") {
+		t.Error("Expected customPackages array in result")
+	}
+	if !strings.Contains(resultStr, `"git"`) {
+		t.Error("Expected 'git' in customPackages")
+	}
+	if !strings.Contains(resultStr, `"neovim"`) {
+		t.Error("Expected 'neovim' in customPackages")
+	}
+	if !strings.Contains(resultStr, `"python3"`) {
+		t.Error("Expected 'python3' in customPackages")
+	}
+
+	// Verify env vars are still present
+	if !strings.Contains(resultStr, `"EDITOR" = "nvim"`) {
+		t.Error("Expected EDITOR env var in result")
+	}
+}

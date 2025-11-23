@@ -29,6 +29,7 @@ type User struct {
 	Shell        string
 	HostName     string
 	EnvVars      map[string]string // Custom environment variables from camp.yml
+	Packages     []string          // Nix packages to install from camp.yml
 	Flakes       []Flake           // External Nix flakes from camp.yml
 }
 
@@ -44,6 +45,7 @@ func NewUser() *User {
 		Shell:        shell,
 		HostName:     utils.HostName(),
 		EnvVars:      make(map[string]string),
+		Packages:     []string{},
 		Flakes:       []Flake{},
 	}
 	// Load config and populate EnvVars and Flakes if available
@@ -65,6 +67,13 @@ func (u *User) Reload() error {
 		u.EnvVars = config.Env
 	} else {
 		u.EnvVars = make(map[string]string)
+	}
+
+	// Update Packages from config
+	if config.Packages != nil {
+		u.Packages = config.Packages
+	} else {
+		u.Packages = []string{}
 	}
 
 	// Update Flakes from config
@@ -95,11 +104,11 @@ type FlakeOutput struct {
 
 // Flake represents an external Nix flake reference
 type Flake struct {
-	Name    string            `yaml:"name"`    // Unique identifier for the flake
-	URL     string            `yaml:"url"`     // Flake URL (github:user/repo, git+ssh://..., path:/..., etc.)
-	Follows map[string]string `yaml:"follows"` // Input dependency overrides (e.g., nixpkgs: "nixpkgs")
-	Args    map[string]interface{} `yaml:"args"` // Custom arguments to pass to flake outputs (types inferred from YAML)
-	Outputs []FlakeOutput     `yaml:"outputs"` // Which outputs to import
+	Name    string                 `yaml:"name"`    // Unique identifier for the flake
+	URL     string                 `yaml:"url"`     // Flake URL (github:user/repo, git+ssh://..., path:/..., etc.)
+	Follows map[string]string      `yaml:"follows"` // Input dependency overrides (e.g., nixpkgs: "nixpkgs")
+	Args    map[string]interface{} `yaml:"args"`    // Custom arguments to pass to flake outputs (types inferred from YAML)
+	Outputs []FlakeOutput          `yaml:"outputs"` // Which outputs to import
 }
 
 // EnvVar represents an environment variable

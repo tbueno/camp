@@ -108,6 +108,147 @@ When writing tests that use User configuration:
 - Test both with and without config files
 - Verify default behavior when config is missing
 
+## Package Management
+
+Camp allows you to declaratively manage Nix packages through the configuration file.
+
+### Configuration Structure
+
+```yaml
+# Nix packages to install via home-manager
+packages:
+  - git
+  - neovim
+  - ripgrep
+  `
+
+### Features
+
+- **Simple String Array**: Package names are plain strings, no complex structures
+- **Attribute Path Support**: Supports nested packages like `python3Packages.requests`
+- **Automatic Validation**: Invalid package names are caught at config load time
+- **Deduplication**: Duplicate packages are rejected with clear error messages
+- **Cross-Platform**: Works on both macOS (via nix-darwin) and Linux (via home-manager)
+
+### Package Name Validation
+
+Package names must meet these requirements:
+- Only letters, numbers, hyphens, underscores, and dots allowed
+- Cannot be empty or whitespace-only
+- No duplicate packages in the list
+- Supports attribute paths with dot notation (e.g., `haskellPackages.pandoc`)
+
+**Valid examples:**
+- `git`
+- `python3`
+- `nodejs_20`
+- `package-with-hyphens`
+- `package_with_underscores`
+- `python3Packages.requests`
+- `haskellPackages.pandoc`
+
+**Invalid examples:**
+- `my package` (contains spaces)
+- `my@package` (contains special characters)
+- `my/package` (contains slashes)
+
+### Integration
+
+1. **Configuration Loading**: Packages are loaded from `camp.yml` during `User.Reload()`
+2. **Validation**: `ValidatePackages()` runs automatically when loading config
+3. **Template Rendering**: Packages are passed to Nix templates via `TemplateData`
+4. **Nix Installation**: Packages are added to `home.packages` in `common.nix`
+5. **Application**: Changes take effect on `camp env rebuild`
+
+### How It Works Internally
+
+**Configuration Flow:**
+```go
+// In config.go
+type CampConfig struct {
+    Env      map[string]string
+    Packages []string  // Simple string array
+    Flakes   []Flake
+}
+
+// In types.go
+type User struct {
+    // ... other fields ...
+    Packages []string  // Loaded from config
+}
+```
+
+**Template Integration:**
+```go
+// Packages are passed to templates
+type TemplateData struct {
+    // ... other fields ...
+    Packages []string
+}
+
+// In flake.nix template
+specialArgs = {
+    customPackages = [
+        "git"
+        "neovim"
+        "ripgrep"
+    ];
+};
+
+// In common.nix (pure Nix, not a template)
+home.packages = with pkgs; [
+    devbox
+    direnv
+    git
+] ++ (map (name: pkgs.${name}) customPackages);
+```
+
+The packages are:
+1. Defined as strings in `camp.yml`
+2. Validated on config load
+3. Passed through `specialArgs` in the flake
+4. Dynamically resolved to package objects in `common.nix` using Nix's `map` function
+
+### Example Configuration
+
+```yaml
+env:
+  EDITOR: nvim
+  BROWSER: firefox
+
+packages:
+  # Core utilities
+  - git
+  - curl
+  - wget
+
+  # Development tools
+  - neovim
+  - ripgrep
+  - fd
+  - bat
+
+  # Programming languages
+  - python3
+  - nodejs_20
+  - go
+
+  # Language-specific packages
+  - python3Packages.requests
+  - python3Packages.flask
+  - nodePackages.typescript
+```
+
+### Testing Packages
+
+When writing package tests:
+- Test config loading with packages: `TestLoadConfig_WithPackages`
+- Test validation: `TestValidatePackages_*`
+- Test template rendering: `TestNewTemplateData_WithPackages`
+- Test saving/loading: `TestSaveConfig_WithPackages`
+- Use `t.TempDir()` for test configs
+- Verify both valid and invalid package names
+
 ## Template System
 
 Camp uses Go's `text/template` package to generate Nix configuration files dynamically.
@@ -520,6 +661,306 @@ See `templates/flakes/` for ready-to-use examples:
 - `personal-packages.yml` - Personal development tools
 - `team-tools.yml` - Organization-wide configurations
 - `README.md` - Comprehensive guide with all URL formats
+
+## Flake Arguments
+
+Camp supports passing arguments to external flakes, allowing you to parameterize flake configurations without hardcoding values.
+
+### Overview
+
+When importing external flakes, camp automatically passes three standard arguments and allows you to define custom arguments:
+
+**Automatic Arguments** (always passed):
+- `userName` - from `User.Name`
+- `hostName` - from `User.HostName`
+- `home` - from `User.HomeDir`
+
+**Custom Arguments**: User-defined values with type inference from YAML
+
+### Configuration Schema
+
+Add arguments to flakes in `~/.camp/camp.yml`:
+
+```yaml
+flakes:
+  - name: personal-config
+    url: "github:username/nix-config"
+    args:
+      email: "user@example.com"      # string (inferred from YAML)
+      enableDevTools: true            # bool
+      fontSize: 14                    # number (int)
+      threshold: 3.14                 # number (float)
+      packages: [vim, git, tmux]      # list of strings
+    outputs:
+      - name: darwinModules.default
+        type: system
+      - name: homeManagerModules.default
+        type: home
+```
+
+### Supported Argument Types
+
+Camp infers types from YAML values and renders them as proper Nix syntax:
+
+| YAML Type | Example Value | Nix Output | Go Type |
+|-----------|---------------|------------|---------|
+| String | `"hello"` | `"hello"` | `string` |
+| Boolean | `true` | `true` | `bool` |
+| Integer | `42` | `42` | `int` |
+| Float | `3.14` | `3.14` | `float64` |
+| List | `[a, b, c]` | `[ "a" "b" "c" ]` | `[]interface{}` |
+
+**Type inference examples**:
+```yaml
+args:
+  name: "camp"           # String (quoted)
+  enabled: true          # Boolean
+  count: 42              # Integer
+  ratio: 0.5             # Float
+  items: ["x", "y"]      # List of strings
+  ports: [8080, 9090]    # List of integers
+  flags: [true, false]   # List of booleans
+```
+
+### Validation Rules
+
+Arguments are validated to prevent errors:
+
+1. **Valid Nix identifiers**: Names must contain only letters, numbers, hyphens, underscores
+2. **Reserved names**: Cannot use `userName`, `hostName`, `home` (automatically provided)
+3. **Supported types**: Only string, bool, number, and list types allowed
+4. **List elements**: Lists can only contain strings, booleans, or numbers (no nested structures)
+
+**Validation examples**:
+```yaml
+# ✅ Valid
+args:
+  my-arg: "value"
+  my_arg: 123
+  ARG_NAME: true
+
+# ❌ Invalid
+args:
+  "my.arg": "value"      # Error: dots not allowed in names
+  userName: "override"   # Error: reserved name
+  nested: {key: "val"}   # Error: maps not supported
+```
+
+### External Flake Pattern
+
+Your external flake must define outputs as functions accepting parameters:
+
+**Example flake** (`github:username/nix-config/flake.nix`):
+```nix
+{
+  description = "Personal Nix configuration";
+
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+  };
+
+  outputs = { self, nixpkgs }:
+  {
+    # System-level module (nix-darwin) - accepts parameters
+    darwinModules.default = { userName, hostName, home, email, ... }@args: {
+      networking.hostName = hostName;
+
+      users.users.${userName} = {
+        name = userName;
+        home = home;
+      };
+
+      # Use custom arguments
+      environment.systemPackages = [
+        # packages based on email domain, etc.
+      ];
+    };
+
+    # User-level module (home-manager) - accepts parameters
+    homeManagerModules.default = { userName, home, email, enableDevTools, ... }@args: {
+      home.username = userName;
+      home.homeDirectory = home;
+
+      programs.git = {
+        enable = true;
+        userEmail = email;
+      };
+
+      # Conditional configuration based on arguments
+      programs.neovim.enable = enableDevTools;
+    };
+  };
+}
+```
+
+**Key points**:
+- Modules are functions, not attribute sets
+- Use `{ userName, hostName, home, customArg, ... }@args:` pattern
+- Include `...` to accept additional arguments
+- Access automatic args (userName, hostName, home) and custom args
+
+### How It Works
+
+**Argument passing flow**:
+```
+1. User defines args in camp.yml
+         ↓
+2. LoadConfig() unmarshals YAML with native types
+         ↓
+3. ValidateFlakeArgs() checks names and types
+         ↓
+4. CompileTemplates() renders flake.nix:
+   - Merges automatic args + custom args
+   - Calls renderNixValue() for type-safe rendering
+         ↓
+5. Generated flake.nix calls external flake outputs as functions:
+   (my-flake.darwinModules.default {
+     userName = "user";
+     hostName = "host";
+     home = "/Users/user";
+     email = "user@example.com";
+     enableDevTools = true;
+   })
+         ↓
+6. ExecuteRebuild() applies configuration
+```
+
+### Generated Template Output
+
+Camp generates function calls in `~/.camp/nix/flake.nix`:
+
+**For system-level outputs**:
+```nix
+modules = [
+  ./mac.nix
+
+  # User's external flake, called with arguments
+  (personal-config.darwinModules.default {
+    userName = "user";
+    hostName = "macbook";
+    home = "/Users/user";
+    email = "user@example.com";
+    enableDevTools = true;
+    fontSize = 14;
+  })
+];
+```
+
+**For home-level outputs**:
+```nix
+home-manager.users.${user} = {
+  imports = [
+    ./modules/common.nix
+
+    # User's external flake, called with arguments
+    (personal-config.homeManagerModules.default {
+      userName = "user";
+      hostName = "macbook";
+      home = "/Users/user";
+      email = "user@example.com";
+      packages = [ "vim" "git" "tmux" ];
+    })
+  ];
+};
+```
+
+### String Escaping
+
+Camp properly escapes special characters in string arguments:
+
+| Character | YAML Input | Nix Output |
+|-----------|------------|------------|
+| Quote | `"hello \"world\""` | `"hello \"world\""` |
+| Backslash | `"path\\to\\file"` | `"path\\to\\file"` |
+| Newline | `"line1\nline2"` | `"line1\nline2"` |
+
+### Complete Example
+
+**camp.yml**:
+```yaml
+env:
+  EDITOR: nvim
+
+flakes:
+  - name: personal-config
+    url: "github:tbueno/nix-config"
+    args:
+      email: "tbueno@gmail.com"
+      enableDevTools: true
+      fontSize: 14
+      packages: [vim, git, tmux, ripgrep]
+    outputs:
+      - name: darwinModules.default
+        type: system
+      - name: homeManagerModules.default
+        type: home
+```
+
+**External flake** (`github:tbueno/nix-config`):
+```nix
+{
+  outputs = { nixpkgs, ... }:
+  {
+    darwinModules.default = { userName, hostName, email, enableDevTools, fontSize, packages, ... }: {
+      networking.hostName = hostName;
+
+      users.users.${userName}.description = email;
+
+      environment.systemPackages = with pkgs;
+        packages ++ (if enableDevTools then [ gcc cmake ] else []);
+    };
+
+    homeManagerModules.default = { email, fontSize, packages, ... }: {
+      programs.git.userEmail = email;
+
+      programs.alacritty.settings.font.size = fontSize;
+
+      home.packages = with pkgs; packages;
+    };
+  };
+}
+```
+
+**Result**: Running `camp env rebuild` generates a flake that calls these modules with your specified arguments, creating a fully parameterized environment.
+
+### Testing Flake Arguments
+
+When writing tests for flake arguments:
+- Test YAML type inference (string, bool, int, float, list)
+- Verify validation catches invalid names and types
+- Test Nix value rendering with `renderNixValue()`
+- Verify template integration with flake args
+- Test automatic args (userName, hostName, home) are passed
+- Verify custom args render with correct Nix syntax
+
+**Example test**:
+```go
+func TestFlakeWithArgs(t *testing.T) {
+    config := &CampConfig{
+        Flakes: []Flake{
+            {
+                Name: "test",
+                URL:  "github:user/flake",
+                Args: map[string]interface{}{
+                    "email": "test@example.com",
+                    "enabled": true,
+                },
+                Outputs: []FlakeOutput{
+                    {Name: "packages", Type: OutputTypeHome},
+                },
+            },
+        },
+    }
+
+    // Validate
+    if err := config.ValidateFlakes(); err != nil {
+        t.Fatalf("Validation failed: %v", err)
+    }
+
+    // Render template and verify args are passed correctly
+    // ...
+}
+```
 
 ## Current Commands
 

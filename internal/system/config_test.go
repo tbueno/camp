@@ -989,9 +989,9 @@ func TestValidateFlakeArgs_NilArgs(t *testing.T) {
 	config := &CampConfig{
 		Flakes: []Flake{
 			{
-				Name:    "test-flake",
-				URL:     "github:user/flake",
-				Args:    nil,
+				Name: "test-flake",
+				URL:  "github:user/flake",
+				Args: nil,
 				Outputs: []FlakeOutput{
 					{Name: "packages", Type: OutputTypeHome},
 				},
@@ -1006,9 +1006,9 @@ func TestValidateFlakeArgs_NilArgs(t *testing.T) {
 
 func TestValidateFlakeArgs_ReservedNames(t *testing.T) {
 	tests := []struct {
-		name         string
-		argName      string
-		expectedMsg  string
+		name        string
+		argName     string
+		expectedMsg string
 	}{
 		{
 			name:        "userName reserved",
@@ -1384,4 +1384,262 @@ func TestSaveAndLoadConfig_PreservesArgTypes(t *testing.T) {
 	if list, ok := args["listArg"].([]interface{}); !ok || len(list) != 3 {
 		t.Errorf("List arg not preserved correctly: %v (%T)", args["listArg"], args["listArg"])
 	}
+}
+
+// ============================================================================
+// Package Tests
+// ============================================================================
+
+func TestLoadConfig_WithPackages(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "camp.yml")
+
+	yamlContent := `env:
+  EDITOR: nvim
+
+packages:
+  - git
+  - neovim
+  - ripgrep
+`
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	config, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() failed: %v", err)
+	}
+
+	if len(config.Packages) != 3 {
+		t.Fatalf("Expected 3 packages, got %d", len(config.Packages))
+	}
+
+	if config.Packages[0] != "git" {
+		t.Errorf("Expected package[0]=git, got %s", config.Packages[0])
+	}
+
+	if config.Packages[1] != "neovim" {
+		t.Errorf("Expected package[1]=neovim, got %s", config.Packages[1])
+	}
+
+	if config.Packages[2] != "ripgrep" {
+		t.Errorf("Expected package[2]=ripgrep, got %s", config.Packages[2])
+	}
+}
+
+func TestLoadConfig_EmptyPackages(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "camp.yml")
+
+	yamlContent := `env:
+  TEST: value
+
+packages: []
+`
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	config, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() failed: %v", err)
+	}
+
+	if config.Packages == nil {
+		t.Error("LoadConfig() should initialize Packages slice even when empty")
+	}
+
+	if len(config.Packages) != 0 {
+		t.Errorf("Expected 0 packages, got %d", len(config.Packages))
+	}
+}
+
+func TestLoadConfig_NoPackagesSection(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "camp.yml")
+
+	yamlContent := `env:
+  TEST: value
+`
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	config, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() failed: %v", err)
+	}
+
+	if config.Packages == nil {
+		t.Error("LoadConfig() should initialize Packages slice when section is missing")
+	}
+}
+
+func TestValidatePackages_DuplicatePackages(t *testing.T) {
+	config := &CampConfig{
+		Packages: []string{"git", "neovim", "git"},
+	}
+
+	err := config.ValidatePackages()
+	if err == nil {
+		t.Error("ValidatePackages() should error on duplicate package names")
+	}
+
+	if err != nil && !contains(err.Error(), "duplicate package") {
+		t.Errorf("Expected duplicate package error, got: %v", err)
+	}
+}
+
+func TestValidatePackages_EmptyPackageName(t *testing.T) {
+	config := &CampConfig{
+		Packages: []string{"git", "", "neovim"},
+	}
+
+	err := config.ValidatePackages()
+	if err == nil {
+		t.Error("ValidatePackages() should error on empty package name")
+	}
+
+	if err != nil && !contains(err.Error(), "empty or contains only whitespace") {
+		t.Errorf("Expected empty package name error, got: %v", err)
+	}
+}
+
+func TestValidatePackages_WhitespaceOnlyPackageName(t *testing.T) {
+	config := &CampConfig{
+		Packages: []string{"git", "   ", "neovim"},
+	}
+
+	err := config.ValidatePackages()
+	if err == nil {
+		t.Error("ValidatePackages() should error on whitespace-only package name")
+	}
+
+	if err != nil && !contains(err.Error(), "empty or contains only whitespace") {
+		t.Errorf("Expected whitespace-only package name error, got: %v", err)
+	}
+}
+
+func TestValidatePackages_InvalidCharacters(t *testing.T) {
+	tests := []struct {
+		name        string
+		packageName string
+	}{
+		{"with spaces", "my package"},
+		{"with special chars", "my@package"},
+		{"with slashes", "my/package"},
+		{"with colons", "my:package"},
+		{"with brackets", "my[package]"},
+		{"with parens", "my(package)"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &CampConfig{
+				Packages: []string{tt.packageName},
+			}
+
+			err := config.ValidatePackages()
+			if err == nil {
+				t.Errorf("ValidatePackages() should error on invalid package name '%s'", tt.packageName)
+			}
+		})
+	}
+}
+
+func TestValidatePackages_ValidPackageNames(t *testing.T) {
+	validPackages := []string{
+		"git",
+		"neovim",
+		"ripgrep",
+		"python3",
+		"nodejs_20",
+		"python3Packages.requests",
+		"haskellPackages.pandoc",
+		"package-with-hyphens",
+		"package_with_underscores",
+		"UPPERCASE",
+		"123numbers",
+		"some.package.with.dots",
+	}
+
+	config := &CampConfig{
+		Packages: validPackages,
+	}
+
+	if err := config.ValidatePackages(); err != nil {
+		t.Errorf("ValidatePackages() should accept valid package names, got error: %v", err)
+	}
+}
+
+func TestValidatePackages_EmptyList(t *testing.T) {
+	config := &CampConfig{
+		Packages: []string{},
+	}
+
+	if err := config.ValidatePackages(); err != nil {
+		t.Errorf("ValidatePackages() should accept empty package list, got error: %v", err)
+	}
+}
+
+func TestValidatePackages_NilList(t *testing.T) {
+	config := &CampConfig{
+		Packages: nil,
+	}
+
+	if err := config.ValidatePackages(); err != nil {
+		t.Errorf("ValidatePackages() should accept nil package list, got error: %v", err)
+	}
+}
+
+func TestSaveConfig_WithPackages(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".camp", "camp.yml")
+
+	config := &CampConfig{
+		Env: map[string]string{
+			"EDITOR": "nvim",
+		},
+		Packages: []string{"git", "neovim", "ripgrep"},
+	}
+
+	if err := config.SaveConfig(configPath); err != nil {
+		t.Fatalf("SaveConfig() failed: %v", err)
+	}
+
+	loadedConfig, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("Failed to load saved config: %v", err)
+	}
+
+	if len(loadedConfig.Packages) != 3 {
+		t.Fatalf("Expected 3 packages, got %d", len(loadedConfig.Packages))
+	}
+
+	if loadedConfig.Packages[0] != "git" {
+		t.Errorf("Expected package[0]=git, got %s", loadedConfig.Packages[0])
+	}
+
+	if loadedConfig.Packages[1] != "neovim" {
+		t.Errorf("Expected package[1]=neovim, got %s", loadedConfig.Packages[1])
+	}
+
+	if loadedConfig.Packages[2] != "ripgrep" {
+		t.Errorf("Expected package[2]=ripgrep, got %s", loadedConfig.Packages[2])
+	}
+}
+
+// Helper function for substring checking
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || containsMiddle(s, substr)))
+}
+
+func containsMiddle(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }

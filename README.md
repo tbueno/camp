@@ -89,9 +89,19 @@ env:
   EDITOR: nvim
   BROWSER: firefox
   CUSTOM_VAR: custom_value
-```
 
-All variables defined in the `env` section will be injected into your Nix environment configuration.
+packages:
+  - git
+  - neovim
+  - ripgrep
+  `
+
+**Configuration Sections:**
+- **`env`**: Environment variables injected into your Nix environment
+- **`packages`**: Nix packages to install via home-manager
+- **`flakes`**: External Nix flakes to integrate (see documentation for details)
+
+All packages will be installed to your home environment and available in your PATH after running `camp env rebuild`.
 
 ### Command Help
 
