@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/template"
 )
 
@@ -16,6 +17,7 @@ type TemplateData struct {
 	Architecture string            // CPU arch (amd64/arm64)
 	HomeDir      string            // User's home directory
 	EnvVars      map[string]string // Custom environment variables
+	Packages     []string          // Nix packages to install
 	Flakes       []Flake           // External Nix flakes to integrate
 }
 
@@ -28,7 +30,39 @@ func NewTemplateData(user *User) *TemplateData {
 		Architecture: user.Architecture,
 		HomeDir:      user.HomeDir,
 		EnvVars:      user.EnvVars,
+		Packages:     user.Packages,
 		Flakes:       user.Flakes,
+	}
+}
+
+// renderNixValue converts a Go value to its Nix syntax representation
+func renderNixValue(value interface{}) string {
+	switch v := value.(type) {
+	case string:
+		// Escape special characters in strings
+		escaped := strings.ReplaceAll(v, "\\", "\\\\")
+		escaped = strings.ReplaceAll(escaped, "\"", "\\\"")
+		escaped = strings.ReplaceAll(escaped, "\n", "\\n")
+		return fmt.Sprintf("\"%s\"", escaped)
+	case bool:
+		if v {
+			return "true"
+		}
+		return "false"
+	case int, int64:
+		return fmt.Sprintf("%d", v)
+	case float64:
+		return fmt.Sprintf("%g", v)
+	case []interface{}:
+		// Render list elements
+		var elements []string
+		for _, elem := range v {
+			elements = append(elements, renderNixValue(elem))
+		}
+		return fmt.Sprintf("[ %s ]", strings.Join(elements, " "))
+	default:
+		// Fallback for unsupported types (should be caught by validation)
+		return fmt.Sprintf("\"%v\"", v)
 	}
 }
 
@@ -40,8 +74,13 @@ func CompileTemplate(templatePath string, data *TemplateData) ([]byte, error) {
 		return nil, fmt.Errorf("failed to read template file: %w", err)
 	}
 
+	// Create template with custom functions
+	funcMap := template.FuncMap{
+		"renderNixValue": renderNixValue,
+	}
+
 	// Parse template
-	tmpl, err := template.New(filepath.Base(templatePath)).Parse(string(templateContent))
+	tmpl, err := template.New(filepath.Base(templatePath)).Funcs(funcMap).Parse(string(templateContent))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse template: %w", err)
 	}

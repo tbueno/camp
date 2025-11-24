@@ -472,3 +472,482 @@ Home outputs:
 		t.Error("Expected flake1.packages in home outputs section")
 	}
 }
+
+// renderNixValue tests
+
+func TestRenderNixValue_String(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"simple string", "hello", `"hello"`},
+		{"empty string", "", `""`},
+		{"string with spaces", "hello world", `"hello world"`},
+		{"string with quotes", `hello "world"`, `"hello \"world\""`},
+		{"string with backslash", `hello\world`, `"hello\\world"`},
+		{"string with newline", "hello\nworld", `"hello\nworld"`},
+		{"complex escaping", `"test\n"`, `"\"test\\n\""`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := renderNixValue(tt.input)
+			if result != tt.expected {
+				t.Errorf("renderNixValue(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestRenderNixValue_Bool(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    bool
+		expected string
+	}{
+		{"true", true, "true"},
+		{"false", false, "false"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := renderNixValue(tt.input)
+			if result != tt.expected {
+				t.Errorf("renderNixValue(%v) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestRenderNixValue_Int(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    interface{}
+		expected string
+	}{
+		{"zero", 0, "0"},
+		{"positive int", 42, "42"},
+		{"negative int", -10, "-10"},
+		{"large int", 1000000, "1000000"},
+		{"int64", int64(9223372036854775807), "9223372036854775807"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := renderNixValue(tt.input)
+			if result != tt.expected {
+				t.Errorf("renderNixValue(%v) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestRenderNixValue_Float(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    float64
+		expected string
+	}{
+		{"zero", 0.0, "0"},
+		{"positive float", 3.14, "3.14"},
+		{"negative float", -2.5, "-2.5"},
+		{"large float", 1000.5, "1000.5"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := renderNixValue(tt.input)
+			if result != tt.expected {
+				t.Errorf("renderNixValue(%v) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestRenderNixValue_List(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []interface{}
+		expected string
+	}{
+		{"empty list", []interface{}{}, "[  ]"},
+		{"string list", []interface{}{"vim", "git", "tmux"}, `[ "vim" "git" "tmux" ]`},
+		{"int list", []interface{}{1, 2, 3}, "[ 1 2 3 ]"},
+		{"bool list", []interface{}{true, false, true}, "[ true false true ]"},
+		{"mixed list", []interface{}{"hello", 42, true}, `[ "hello" 42 true ]`},
+		{"float list", []interface{}{1.5, 2.7, 3.14}, "[ 1.5 2.7 3.14 ]"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := renderNixValue(tt.input)
+			if result != tt.expected {
+				t.Errorf("renderNixValue(%v) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestCompileTemplate_WithRenderNixValue(t *testing.T) {
+	// Create temporary directory
+	tmpDir := t.TempDir()
+	templatePath := filepath.Join(tmpDir, "test.tmpl")
+
+	// Write template that uses renderNixValue function
+	templateContent := `{{range $key, $value := .Flakes}}{{range $argKey, $argValue := .Args}}{{ $argKey }} = {{ renderNixValue $argValue }};
+{{end}}{{end}}`
+	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
+		t.Fatalf("Failed to write template: %v", err)
+	}
+
+	// Create template data with flake args
+	data := &TemplateData{
+		Flakes: []Flake{
+			{
+				Name: "test-flake",
+				URL:  "github:user/flake",
+				Args: map[string]interface{}{
+					"email":         "test@example.com",
+					"enableFeature": true,
+					"fontSize":      14,
+					"threshold":     3.14,
+					"packages":      []interface{}{"vim", "git"},
+				},
+			},
+		},
+	}
+
+	// Compile template
+	result, err := CompileTemplate(templatePath, data)
+	if err != nil {
+		t.Fatalf("CompileTemplate() failed: %v", err)
+	}
+
+	resultStr := string(result)
+
+	// Check that all args are rendered correctly
+	expectedLines := []string{
+		`email = "test@example.com";`,
+		`enableFeature = true;`,
+		`fontSize = 14;`,
+		`threshold = 3.14;`,
+		`packages = [ "vim" "git" ];`,
+	}
+
+	for _, expected := range expectedLines {
+		if !strings.Contains(resultStr, expected) {
+			t.Errorf("Expected result to contain %q, got:\n%s", expected, resultStr)
+		}
+	}
+}
+
+func TestCompileTemplate_FlakeWithArgs(t *testing.T) {
+	// Create temporary directory
+	tmpDir := t.TempDir()
+	templatePath := filepath.Join(tmpDir, "flake.nix")
+
+	// Write simplified flake template with args
+	templateContent := `{
+  outputs = { ... }:
+  {
+    darwinConfigurations.test = {
+      modules = [
+        # System modules
+        {{- range $flake := .Flakes }}
+          {{- range .Outputs }}
+            {{- if eq .Type "system" }}
+        ({{ $flake.Name }}.{{ .Name }} {
+          userName = "{{ $.Name }}";
+          hostName = "{{ $.HostName }}";
+          home = "{{ $.HomeDir }}";
+          {{- range $key, $value := $flake.Args }}
+          {{ $key }} = {{ renderNixValue $value }};
+          {{- end }}
+        })
+            {{- end }}
+          {{- end }}
+        {{- end }}
+      ];
+    };
+
+    homeConfigurations.test = {
+      modules = [
+        # Home modules
+        {{- range $flake := .Flakes }}
+          {{- range .Outputs }}
+            {{- if eq .Type "home" }}
+        ({{ $flake.Name }}.{{ .Name }} {
+          userName = "{{ $.Name }}";
+          hostName = "{{ $.HostName }}";
+          home = "{{ $.HomeDir }}";
+          {{- range $key, $value := $flake.Args }}
+          {{ $key }} = {{ renderNixValue $value }};
+          {{- end }}
+        })
+            {{- end }}
+          {{- end }}
+        {{- end }}
+      ];
+    };
+  };
+}`
+	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
+		t.Fatalf("Failed to write template: %v", err)
+	}
+
+	// Create template data with flake args
+	data := &TemplateData{
+		Name:     "testuser",
+		HostName: "testhost",
+		HomeDir:  "/home/testuser",
+		Flakes: []Flake{
+			{
+				Name: "my-config",
+				URL:  "github:user/config",
+				Args: map[string]interface{}{
+					"email":         "test@example.com",
+					"enableFeature": true,
+					"fontSize":      14,
+					"packages":      []interface{}{"vim", "git"},
+				},
+				Outputs: []FlakeOutput{
+					{Name: "darwinModules.default", Type: OutputTypeSystem},
+					{Name: "homeManagerModules.default", Type: OutputTypeHome},
+				},
+			},
+		},
+	}
+
+	// Compile template
+	result, err := CompileTemplate(templatePath, data)
+	if err != nil {
+		t.Fatalf("CompileTemplate() failed: %v", err)
+	}
+
+	resultStr := string(result)
+
+	// Verify system module has args
+	if !strings.Contains(resultStr, `(my-config.darwinModules.default {`) {
+		t.Error("Expected system module to be called as function")
+	}
+	if !strings.Contains(resultStr, `userName = "testuser";`) {
+		t.Error("Expected userName arg in system module")
+	}
+	if !strings.Contains(resultStr, `hostName = "testhost";`) {
+		t.Error("Expected hostName arg in system module")
+	}
+	if !strings.Contains(resultStr, `home = "/home/testuser";`) {
+		t.Error("Expected home arg in system module")
+	}
+	if !strings.Contains(resultStr, `email = "test@example.com";`) {
+		t.Error("Expected custom email arg in system module")
+	}
+	if !strings.Contains(resultStr, `enableFeature = true;`) {
+		t.Error("Expected custom enableFeature arg in system module")
+	}
+	if !strings.Contains(resultStr, `fontSize = 14;`) {
+		t.Error("Expected custom fontSize arg in system module")
+	}
+	if !strings.Contains(resultStr, `packages = [ "vim" "git" ];`) {
+		t.Error("Expected custom packages arg in system module")
+	}
+
+	// Verify home module has args too
+	if !strings.Contains(resultStr, `(my-config.homeManagerModules.default {`) {
+		t.Error("Expected home module to be called as function")
+	}
+
+	// Count occurrences to ensure both modules got the args
+	if strings.Count(resultStr, `userName = "testuser";`) != 2 {
+		t.Errorf("Expected userName to appear twice (system + home), got %d occurrences", strings.Count(resultStr, `userName = "testuser";`))
+	}
+}
+
+// ============================================================================
+// Package Template Tests
+// ============================================================================
+
+func TestNewTemplateData_WithPackages(t *testing.T) {
+	user := &User{
+		Name:         "testuser",
+		HostName:     "testhost",
+		Platform:     "darwin",
+		Architecture: "arm64",
+		HomeDir:      "/Users/testuser",
+		EnvVars:      make(map[string]string),
+		Packages:     []string{"git", "neovim", "ripgrep"},
+		Flakes:       []Flake{},
+	}
+
+	data := NewTemplateData(user)
+
+	if len(data.Packages) != 3 {
+		t.Fatalf("Expected 3 packages, got %d", len(data.Packages))
+	}
+
+	if data.Packages[0] != "git" {
+		t.Errorf("Expected package[0]=git, got %s", data.Packages[0])
+	}
+
+	if data.Packages[1] != "neovim" {
+		t.Errorf("Expected package[1]=neovim, got %s", data.Packages[1])
+	}
+
+	if data.Packages[2] != "ripgrep" {
+		t.Errorf("Expected package[2]=ripgrep, got %s", data.Packages[2])
+	}
+}
+
+func TestNewTemplateData_WithEmptyPackages(t *testing.T) {
+	user := &User{
+		Name:         "testuser",
+		HostName:     "testhost",
+		Platform:     "darwin",
+		Architecture: "arm64",
+		HomeDir:      "/Users/testuser",
+		EnvVars:      make(map[string]string),
+		Packages:     []string{},
+		Flakes:       []Flake{},
+	}
+
+	data := NewTemplateData(user)
+
+	if data.Packages == nil {
+		t.Error("NewTemplateData() should preserve empty Packages slice")
+	}
+
+	if len(data.Packages) != 0 {
+		t.Errorf("Expected 0 packages, got %d", len(data.Packages))
+	}
+}
+
+func TestCompileTemplate_WithPackages(t *testing.T) {
+	tmpDir := t.TempDir()
+	templatePath := filepath.Join(tmpDir, "test.tmpl")
+
+	templateContent := `customPackages = [
+{{- range .Packages }}
+  "{{ . }}"
+{{- end }}
+];`
+	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
+		t.Fatalf("Failed to write template: %v", err)
+	}
+
+	data := &TemplateData{
+		Packages: []string{"git", "neovim", "ripgrep"},
+	}
+
+	result, err := CompileTemplate(templatePath, data)
+	if err != nil {
+		t.Fatalf("CompileTemplate() failed: %v", err)
+	}
+
+	resultStr := string(result)
+	if !strings.Contains(resultStr, `"git"`) {
+		t.Error("Expected 'git' in result")
+	}
+	if !strings.Contains(resultStr, `"neovim"`) {
+		t.Error("Expected 'neovim' in result")
+	}
+	if !strings.Contains(resultStr, `"ripgrep"`) {
+		t.Error("Expected 'ripgrep' in result")
+	}
+}
+
+func TestCompileTemplate_WithEmptyPackages(t *testing.T) {
+	tmpDir := t.TempDir()
+	templatePath := filepath.Join(tmpDir, "test.tmpl")
+
+	templateContent := `customPackages = [
+{{- range .Packages }}
+  "{{ . }}"
+{{- end }}
+];`
+	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
+		t.Fatalf("Failed to write template: %v", err)
+	}
+
+	data := &TemplateData{
+		Packages: []string{},
+	}
+
+	result, err := CompileTemplate(templatePath, data)
+	if err != nil {
+		t.Fatalf("CompileTemplate() failed: %v", err)
+	}
+
+	resultStr := string(result)
+	expected := "customPackages = [\n];"
+	if resultStr != expected {
+		t.Errorf("Expected %q, got %q", expected, resultStr)
+	}
+}
+
+func TestCompileTemplate_PackagesInFlakeTemplate(t *testing.T) {
+	tmpDir := t.TempDir()
+	templatePath := filepath.Join(tmpDir, "flake.nix")
+
+	// Simplified flake template with packages in specialArgs
+	templateContent := `{
+  outputs = { ... }:
+  let
+    specialArgs = {
+      inherit hostName user usersPath;
+      customEnvVars = {
+        {{- range $key, $value := .EnvVars }}
+        "{{ $key }}" = "{{ $value }}";
+        {{- end }}
+      };
+      customPackages = [
+        {{- range .Packages }}
+        "{{ . }}"
+        {{- end }}
+      ];
+    };
+  in
+  {
+    # Configuration using specialArgs
+  };
+}`
+	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
+		t.Fatalf("Failed to write template: %v", err)
+	}
+
+	data := &TemplateData{
+		Name:     "testuser",
+		HostName: "testhost",
+		HomeDir:  "/Users/testuser",
+		EnvVars: map[string]string{
+			"EDITOR": "nvim",
+		},
+		Packages: []string{"git", "neovim", "python3"},
+	}
+
+	result, err := CompileTemplate(templatePath, data)
+	if err != nil {
+		t.Fatalf("CompileTemplate() failed: %v", err)
+	}
+
+	resultStr := string(result)
+
+	// Verify packages are in customPackages array
+	if !strings.Contains(resultStr, "customPackages = [") {
+		t.Error("Expected customPackages array in result")
+	}
+	if !strings.Contains(resultStr, `"git"`) {
+		t.Error("Expected 'git' in customPackages")
+	}
+	if !strings.Contains(resultStr, `"neovim"`) {
+		t.Error("Expected 'neovim' in customPackages")
+	}
+	if !strings.Contains(resultStr, `"python3"`) {
+		t.Error("Expected 'python3' in customPackages")
+	}
+
+	// Verify env vars are still present
+	if !strings.Contains(resultStr, `"EDITOR" = "nvim"`) {
+		t.Error("Expected EDITOR env var in result")
+	}
+}

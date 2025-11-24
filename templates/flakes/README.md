@@ -31,6 +31,13 @@ Shows how to share configurations across a team:
 - Shared development environments
 - Team coding standards
 
+### Parameterized Example (`parameterized-example.yml`)
+Shows how to pass arguments to flakes for dynamic configuration:
+- Type-safe argument passing (strings, bools, numbers, lists)
+- Automatic arguments (userName, hostName, home)
+- Custom arguments for personalization
+- Reusable, configurable flake modules
+
 ## Flake URL Formats
 
 Camp supports all standard Nix flake URL formats:
@@ -130,6 +137,78 @@ flakes:
       - name: darwinModules.system
         type: system
 ```
+
+### With Arguments (Parameterized Flakes)
+Pass custom configuration values to your flakes:
+
+```yaml
+flakes:
+  - name: personal-config
+    url: "github:user/nix-config"
+    args:
+      # String arguments
+      email: "user@example.com"
+      gitSigningKey: "ABCD1234"
+
+      # Boolean flags
+      enableDevTools: true
+      useGPG: false
+
+      # Numeric values
+      fontSize: 14
+      maxJobs: 8
+
+      # Lists
+      packages: [vim, git, tmux]
+      ports: [8080, 3000]
+
+    outputs:
+      - name: darwinModules.default
+        type: system
+      - name: homeManagerModules.default
+        type: home
+```
+
+**Automatic arguments** (always passed):
+- `userName` - Your system username
+- `hostName` - Your machine hostname
+- `home` - Your home directory path
+
+**Your external flake** must define outputs as functions:
+```nix
+{
+  outputs = { ... }:
+  {
+    darwinModules.default = {
+      userName,      # automatic
+      hostName,      # automatic
+      home,          # automatic
+      email,         # from args
+      enableDevTools,# from args
+      packages,      # from args
+      ...            # catch remaining
+    }@args: {
+      # Use arguments in your config
+      networking.hostName = hostName;
+      users.users.${userName}.description = email;
+
+      environment.systemPackages = with pkgs;
+        packages ++ (if enableDevTools then [ gcc ] else []);
+    };
+  };
+}
+```
+
+**Supported argument types:**
+- **String**: `"value"` → `"value"`
+- **Boolean**: `true` / `false` → `true` / `false`
+- **Number**: `42` or `3.14` → `42` or `3.14`
+- **List**: `[a, b, c]` → `[ "a" "b" "c" ]`
+
+**Validation rules:**
+- Argument names must be valid Nix identifiers (alphanumeric, hyphens, underscores)
+- Cannot use reserved names: `userName`, `hostName`, `home`
+- Only string, bool, number, and list types are supported
 
 ## Output Types
 

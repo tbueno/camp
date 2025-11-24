@@ -4,21 +4,24 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
 // CampConfig represents the camp.yml configuration file
 type CampConfig struct {
-	Env    map[string]string `yaml:"env"`    // Environment variables
-	Flakes []Flake           `yaml:"flakes"` // External Nix flakes to integrate
+	Env      map[string]string `yaml:"env"`      // Environment variables
+	Packages []string          `yaml:"packages"` // Nix packages to install
+	Flakes   []Flake           `yaml:"flakes"`   // External Nix flakes to integrate
 }
 
 // DefaultConfig returns a CampConfig with sensible defaults
 func DefaultConfig() *CampConfig {
 	return &CampConfig{
-		Env:    make(map[string]string),
-		Flakes: []Flake{},
+		Env:      make(map[string]string),
+		Packages: []string{},
+		Flakes:   []Flake{},
 	}
 }
 
@@ -46,6 +49,11 @@ func LoadConfig(path string) (*CampConfig, error) {
 	// Initialize Env map if nil
 	if config.Env == nil {
 		config.Env = make(map[string]string)
+	}
+
+	// Initialize Packages slice if nil
+	if config.Packages == nil {
+		config.Packages = []string{}
 	}
 
 	// Initialize Flakes slice if nil
@@ -99,6 +107,12 @@ func (c *CampConfig) Validate() error {
 	if err := c.ValidateFlakes(); err != nil {
 		return err
 	}
+
+	// Validate packages configuration
+	if err := c.ValidatePackages(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -151,9 +165,130 @@ func (c *CampConfig) ValidateFlakes() error {
 					flake.Name, output.Name, output.Type)
 			}
 		}
+
+		// Validate arguments
+		if err := validateFlakeArgs(flake.Name, flake.Args); err != nil {
+			return err
+		}
 	}
 
 	return nil
+}
+
+// validateFlakeArgs validates the arguments for a flake
+func validateFlakeArgs(flakeName string, args map[string]interface{}) error {
+	if args == nil || len(args) == 0 {
+		// Empty args is valid
+		return nil
+	}
+
+	// Reserved argument names (automatically provided by camp)
+	reservedNames := map[string]bool{
+		"userName": true,
+		"hostName": true,
+		"home":     true,
+	}
+
+	for argName, argValue := range args {
+		// Validate arg name is not empty
+		if argName == "" {
+			return fmt.Errorf("flake '%s' has an argument with empty name", flakeName)
+		}
+
+		// Validate arg name is a valid Nix identifier
+		if !isValidNixIdentifier(argName) {
+			return fmt.Errorf("flake '%s' argument '%s' has invalid name - must contain only letters, numbers, hyphens, and underscores", flakeName, argName)
+		}
+
+		// Check for reserved names
+		if reservedNames[argName] {
+			return fmt.Errorf("flake '%s' argument '%s' uses a reserved name - userName, hostName, and home are automatically provided", flakeName, argName)
+		}
+
+		// Validate argument type is supported
+		if err := validateArgType(flakeName, argName, argValue); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// validateArgType validates that an argument value is a supported type
+func validateArgType(flakeName, argName string, value interface{}) error {
+	switch v := value.(type) {
+	case string, bool, int, int64, float64:
+		// Supported scalar types
+		return nil
+	case []interface{}:
+		// Validate list elements are supported types
+		for i, elem := range v {
+			switch elem.(type) {
+			case string, bool, int, int64, float64:
+				// Supported element types
+				continue
+			default:
+				return fmt.Errorf("flake '%s' argument '%s' list element at index %d has unsupported type (only string, bool, number are supported in lists)", flakeName, argName, i)
+			}
+		}
+		return nil
+	default:
+		return fmt.Errorf("flake '%s' argument '%s' has unsupported type - only string, bool, number, and list types are supported", flakeName, argName)
+	}
+}
+
+// ValidatePackages validates the packages configuration
+func (c *CampConfig) ValidatePackages() error {
+	if c.Packages == nil || len(c.Packages) == 0 {
+		// Empty packages is valid
+		return nil
+	}
+
+	// Track package names to ensure uniqueness
+	seen := make(map[string]bool)
+
+	for i, pkg := range c.Packages {
+		// Validate package name is not empty or whitespace-only
+		if strings.TrimSpace(pkg) == "" {
+			return fmt.Errorf("package at index %d is empty or contains only whitespace", i)
+		}
+
+		// Validate package name doesn't contain invalid characters
+		// Nix package names should be alphanumeric with hyphens, underscores, and dots
+		if !isValidNixPackageName(pkg) {
+			return fmt.Errorf("package '%s' has invalid format - must contain only letters, numbers, hyphens, underscores, and dots", pkg)
+		}
+
+		// Check for duplicates
+		if seen[pkg] {
+			return fmt.Errorf("duplicate package '%s' - package names must be unique", pkg)
+		}
+		seen[pkg] = true
+	}
+
+	return nil
+}
+
+// isValidNixPackageName checks if a string is a valid Nix package name
+// Valid package names contain letters, numbers, hyphens, underscores, and dots
+// They may also contain attribute paths like "python3Packages.requests"
+func isValidNixPackageName(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+
+	for _, r := range s {
+		if !((r >= 'a' && r <= 'z') ||
+			(r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') ||
+			r == '-' ||
+			r == '_' ||
+			r == '.') {
+			return false
+		}
+	}
+
+	return true
 }
 
 // isValidNixIdentifier checks if a string is a valid Nix identifier
