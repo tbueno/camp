@@ -1,0 +1,24 @@
+# Camp configuration with package management
+# Tests package installation through Nix
+
+env:
+  EDITOR: "nvim"
+  SHELL: "zsh"
+
+packages:
+  # Core utilities
+  - git
+  - curl
+  - wget
+
+  # Development tools
+  - neovim
+  - ripgrep
+  - fd
+  - bat
+  - fzf
+
+  # Language-specific packages
+  - python3
+  - nodejs_20
+  - go

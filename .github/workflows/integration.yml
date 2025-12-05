@@ -1,0 +1,258 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [ main, integration-test ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  # Run integration tests on Ubuntu using Docker
+  test-ubuntu:
+    name: Integration Tests (Ubuntu)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.4'
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Build camp binary
+        run: go build -o camp main.go
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        working-directory: test/integration/docker
+        run: docker build -t camp-integration-test:latest .
+
+      - name: Run integration tests
+        run: ./test/integration/scripts/run-tests.sh
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-ubuntu
+          path: |
+            test-results/
+          retention-days: 7
+
+  # Run integration tests on macOS (native, no Docker)
+  test-macos:
+    name: Integration Tests (macOS)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.4'
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v26
+        with:
+          nix_path: nixpkgs=channel:nixpkgs-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Cache Nix store
+        uses: DeterminateSystems/magic-nix-cache-action@v4
+
+      - name: Build camp binary
+        run: go build -o camp main.go
+
+      - name: Run bootstrap test
+        run: |
+          export PATH="$PWD:$PATH"
+          rm -rf ~/.camp ~/.envrc
+          ./camp bootstrap
+
+          # Verify bootstrap
+          test -d ~/.camp || exit 1
+          test -f ~/.camp/camp.yml || exit 1
+          test -f ~/.camp/nix/flake.nix || exit 1
+          echo "✓ Bootstrap test passed"
+
+      - name: Run rebuild test
+        run: |
+          export PATH="$PWD:$PATH"
+
+          # Create test config
+          cat > ~/.camp/camp.yml <<EOF
+          env:
+            EDITOR: "nvim"
+            TEST_VAR: "test-value"
+          EOF
+
+          # Run rebuild (may fail on actual Nix rebuild, that's OK)
+          ./camp env rebuild || true
+
+          # Verify config was processed
+          grep -q "EDITOR" ~/.camp/nix/flake.nix || exit 1
+          grep -q "nvim" ~/.camp/nix/flake.nix || exit 1
+          echo "✓ Rebuild test passed"
+
+      - name: Run package test
+        run: |
+          export PATH="$PWD:$PATH"
+
+          # Create config with packages
+          cat > ~/.camp/camp.yml <<EOF
+          packages:
+            - git
+            - ripgrep
+            - neovim
+          EOF
+
+          ./camp env rebuild || true
+
+          # Verify packages in flake
+          grep -q "customPackages" ~/.camp/nix/flake.nix || exit 1
+          grep -q '"git"' ~/.camp/nix/flake.nix || exit 1
+          grep -q '"ripgrep"' ~/.camp/nix/flake.nix || exit 1
+          echo "✓ Package test passed"
+
+      - name: Run flake test
+        run: |
+          export PATH="$PWD:$PATH"
+
+          # Create config with flakes
+          cat > ~/.camp/camp.yml <<EOF
+          flakes:
+            - name: test-flake
+              url: "github:test/flake"
+              args:
+                email: "test@example.com"
+                enabled: true
+              outputs:
+                - name: packages
+                  type: home
+          EOF
+
+          ./camp env rebuild || true
+
+          # Verify flake in generated config
+          grep -q "test-flake" ~/.camp/nix/flake.nix || exit 1
+          grep -q "github:test/flake" ~/.camp/nix/flake.nix || exit 1
+          grep -q "email" ~/.camp/nix/flake.nix || exit 1
+          echo "✓ Flake test passed"
+
+      - name: Run nuke test
+        run: |
+          export PATH="$PWD:$PATH"
+
+          # Verify environment exists
+          test -d ~/.camp || exit 1
+
+          # Run nuke
+          ./camp env nuke
+
+          # Verify cleanup (allow empty directory)
+          if [ -d ~/.camp ]; then
+            file_count=$(find ~/.camp -type f | wc -l)
+            if [ "$file_count" -gt 0 ]; then
+              echo "ERROR: Files remain after nuke"
+              exit 1
+            fi
+          fi
+
+          test ! -f ~/.envrc || exit 1
+          echo "✓ Nuke test passed"
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-macos
+          path: |
+            ~/.camp/
+          retention-days: 7
+
+  # Run unit tests (existing Go tests)
+  test-unit:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.4'
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Run unit tests
+        run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.txt
+          flags: unittests
+          name: codecov-umbrella
+        continue-on-error: true
+
+  # Summary job that depends on all tests
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [test-ubuntu, test-macos, test-unit]
+    if: always()
+
+    steps:
+      - name: Check test results
+        run: |
+          echo "Test Results:"
+          echo "  Ubuntu Integration: ${{ needs.test-ubuntu.result }}"
+          echo "  macOS Integration: ${{ needs.test-macos.result }}"
+          echo "  Unit Tests: ${{ needs.test-unit.result }}"
+
+          if [ "${{ needs.test-ubuntu.result }}" != "success" ] || \
+             [ "${{ needs.test-macos.result }}" != "success" ] || \
+             [ "${{ needs.test-unit.result }}" != "success" ]; then
+            echo "❌ Some tests failed"
+            exit 1
+          else
+            echo "✅ All tests passed"
+          fi

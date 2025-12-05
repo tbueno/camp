@@ -1,0 +1,55 @@
+# Dockerfile for camp integration testing on Ubuntu with Nix
+FROM ubuntu:latest
+
+# Avoid interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    xz-utils \
+    sudo \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a non-root user for testing (more realistic)
+RUN useradd -m -s /bin/bash -G sudo testuser && \
+    echo "testuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# Switch to test user
+USER testuser
+WORKDIR /home/testuser
+
+# Install Nix (single-user mode for simplicity in container)
+RUN curl -L https://nixos.org/nix/install | sh -s -- --no-daemon
+
+# Set up Nix environment variables
+ENV PATH="/home/testuser/.nix-profile/bin:${PATH}"
+ENV NIX_PATH="/home/testuser/.nix-defexpr/channels"
+
+# Enable nix-command and flakes experimental features
+RUN mkdir -p /home/testuser/.config/nix && \
+    echo "experimental-features = nix-command flakes" > /home/testuser/.config/nix/nix.conf
+
+# Source Nix profile in bashrc for interactive shells
+RUN echo 'source /home/testuser/.nix-profile/etc/profile.d/nix.sh' >> /home/testuser/.bashrc
+
+# Pre-install commonly needed Nix packages to speed up tests
+# Note: This is optional but helps with test performance
+RUN . /home/testuser/.nix-profile/etc/profile.d/nix.sh && \
+    nix-channel --update && \
+    nix-env -iA nixpkgs.git nixpkgs.direnv
+
+# Create directory for camp binary
+RUN mkdir -p /home/testuser/bin
+
+# Set working directory for tests
+WORKDIR /home/testuser
+
+# Copy entrypoint script
+COPY --chown=testuser:testuser entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["/bin/bash"]

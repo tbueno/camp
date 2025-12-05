@@ -1,0 +1,6 @@
+# Basic camp configuration for integration tests
+# Minimal setup with just environment variables
+
+env:
+  EDITOR: "vim"
+  BROWSER: "firefox"

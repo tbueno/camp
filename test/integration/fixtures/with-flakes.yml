@@ -1,0 +1,41 @@
+# Camp configuration with external flakes
+# Tests flake integration with inputs, outputs, and arguments
+
+env:
+  EDITOR: "nvim"
+  BROWSER: "firefox"
+
+packages:
+  - git
+  - neovim
+
+flakes:
+  # Example flake with home-level outputs
+  - name: personal-tools
+    url: "github:username/personal-tools"
+    follows:
+      nixpkgs: "nixpkgs"
+    outputs:
+      - name: packages
+        type: home
+
+  # Example flake with arguments
+  - name: custom-config
+    url: "github:username/nix-config"
+    args:
+      email: "user@example.com"
+      enableDevTools: true
+      fontSize: 14
+      favoritePackages: ["vim", "tmux", "git"]
+    outputs:
+      - name: homeManagerModules.default
+        type: home
+
+  # Example flake with system-level outputs
+  - name: system-config
+    url: "github:org/system-config"
+    outputs:
+      - name: darwinModules.default
+        type: system
+      - name: homeManagerModules.default
+        type: home

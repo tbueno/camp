@@ -1,0 +1,103 @@
+# Complete camp configuration for comprehensive integration tests
+# Combines env vars, packages, and flakes
+
+env:
+  # Editor configuration
+  EDITOR: "nvim"
+  VISUAL: "nvim"
+
+  # Shell configuration
+  SHELL: "zsh"
+
+  # Browser
+  BROWSER: "firefox"
+
+  # Development
+  GOPATH: "$HOME/go"
+  CARGO_HOME: "$HOME/.cargo"
+
+  # Custom variables
+  PROJECT_DIR: "$HOME/projects"
+  WORKSPACE: "$HOME/workspace"
+
+packages:
+  # Version control
+  - git
+  - gh
+
+  # Editors
+  - neovim
+  - vim
+
+  # Shell tools
+  - zsh
+  - tmux
+  - starship
+
+  # Modern CLI tools
+  - ripgrep
+  - fd
+  - bat
+  - fzf
+  - exa
+  - bottom
+
+  # Network tools
+  - curl
+  - wget
+  - httpie
+
+  # Development languages
+  - python3
+  - nodejs_20
+  - go
+  - rustc
+  - cargo
+
+  # Language-specific packages
+  - python3Packages.pip
+  - python3Packages.virtualenv
+  - nodePackages.npm
+  - nodePackages.typescript
+
+  # Build tools
+  - gnumake
+  - cmake
+  - gcc
+
+flakes:
+  # Personal dotfiles
+  - name: dotfiles
+    url: "github:user/dotfiles"
+    follows:
+      nixpkgs: "nixpkgs"
+    args:
+      email: "user@example.com"
+      gitSigningKey: "ABC123"
+    outputs:
+      - name: homeManagerModules.default
+        type: home
+
+  # Team tools
+  - name: team-tools
+    url: "git+ssh://git@github.com/company/nix-tools.git"
+    follows:
+      nixpkgs: "nixpkgs"
+    args:
+      enableCompanyVPN: true
+      slackToken: "xoxb-secret"
+    outputs:
+      - name: darwinModules.company
+        type: system
+      - name: homeManagerModules.company
+        type: home
+
+  # Development environment
+  - name: dev-env
+    url: "github:org/dev-environment"
+    args:
+      languages: ["python", "go", "rust"]
+      enableDocker: true
+    outputs:
+      - name: packages
+        type: home
