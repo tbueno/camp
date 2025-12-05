@@ -3,14 +3,17 @@
 { config, pkgs, ... }:
 
 {
+  # Home Manager needs a bit of information about you and the paths it should
+  # manage.
+  home.username = "__USER__";
+  home.homeDirectory = "__HOME__";
+
   home.stateVersion = "24.05"; # Please read the comment before changing.
 
   # The home.packages option allows you to install Nix packages into your
   # environment.
   home.packages = [
     pkgs.git
-    pkgs.direnv
-    pkgs.devbox
   ];
 
   home.sessionVariables = {

@@ -3,8 +3,10 @@ package system
 import (
 	"camp/internal/utils"
 	"os"
+	"os/exec"
 	"os/user"
 	"runtime"
+	"strings"
 )
 
 // System represents the system's basic information
@@ -33,6 +35,34 @@ type User struct {
 	Flakes       []Flake           // External Nix flakes from camp.yml
 }
 
+// getRuntimeArchitecture detects the actual system architecture at runtime
+// This is needed because cross-compiled binaries report the compile-time architecture
+func getRuntimeArchitecture() string {
+	// On Linux, use uname -m to detect actual architecture
+	if runtime.GOOS == "linux" {
+		cmd := exec.Command("uname", "-m")
+		output, err := cmd.Output()
+		if err == nil {
+			arch := strings.TrimSpace(string(output))
+			// Convert uname output to Go architecture names
+			switch arch {
+			case "x86_64":
+				return "amd64"
+			case "aarch64":
+				return "arm64"
+			case "i686", "i386":
+				return "386"
+			case "armv7l":
+				return "arm"
+			default:
+				return arch
+			}
+		}
+	}
+	// Fallback to runtime.GOARCH for non-Linux or if uname fails
+	return runtime.GOARCH
+}
+
 // NewUser creates a new User instance using only current user's machine information.
 func NewUser() *User {
 	u, _ := user.Current()
@@ -41,7 +71,7 @@ func NewUser() *User {
 		Name:         u.Username,
 		HomeDir:      u.HomeDir,
 		Platform:     runtime.GOOS,
-		Architecture: runtime.GOARCH,
+		Architecture: getRuntimeArchitecture(),
 		Shell:        shell,
 		HostName:     utils.HostName(),
 		EnvVars:      make(map[string]string),
