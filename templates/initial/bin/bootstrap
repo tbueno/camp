@@ -8,10 +8,19 @@ if [ -z $CAMP_DIR ]; then
     exit 1
 fi
 
+# Export USER if not already set (needed by home-manager)
+export USER="${USER:-$(whoami)}"
 
 setup_nix() {
-
-    . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+    # Source Nix profile (try daemon mode first, then single-user mode)
+    if [ -f /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]; then
+        . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+    elif [ -f "$HOME/.nix-profile/etc/profile.d/nix.sh" ]; then
+        . "$HOME/.nix-profile/etc/profile.d/nix.sh"
+    else
+        echo "ERROR: Nix profile not found"
+        exit 1
+    fi
     if [ "$OS" = "Darwin" ]; then
         echo "Updating flake inputs..."
         nix --extra-experimental-features nix-command --extra-experimental-features flakes flake update --flake "$CAMP_DIR/nix"
@@ -27,12 +36,19 @@ setup_nix() {
 
         sudo --preserve-env=HOME,USER nix --extra-experimental-features nix-command --extra-experimental-features flakes run nix-darwin -- switch --flake "$CAMP_DIR/nix#$USERNAME"
     elif [ "$OS" = "Linux" ]; then
-        nix-channel --add https://github.com/nix-community/home-manager/archive/release-24.11.tar.gz home-manager
-        nix-channel --update
-        nix-shell '<home-manager>' -A install
-        ln -s $CAMP_DIR/nix/flake.nix ~/.config/home-manager/flake.nix -f
-        ln -s $CAMP_DIR/nix/home.nix ~/.config/home-manager/home.nix -f
-        home-manager switch
+        echo "Setting up home-manager with flakes..."
+
+        # Create home-manager config directory if it doesn't exist
+        mkdir -p ~/.config/home-manager
+
+        # Create symlinks to our flake and home.nix
+        ln -sf "$CAMP_DIR/nix/flake.nix" ~/.config/home-manager/flake.nix
+        ln -sf "$CAMP_DIR/nix/home.nix" ~/.config/home-manager/home.nix
+
+        # Build and activate the home-manager configuration using flakes
+        echo "Building and activating home-manager configuration..."
+        USERNAME=$(whoami)
+        nix --extra-experimental-features 'nix-command flakes' run nixpkgs#home-manager -- switch --flake "$CAMP_DIR/nix#$USERNAME"
     fi
 }
 

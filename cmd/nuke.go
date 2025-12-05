@@ -33,8 +33,13 @@ run 'camp bootstrap' again if you want to use camp in the future.`,
 	RunE: runNuke,
 }
 
+var (
+	skipConfirmation bool
+)
+
 func init() {
 	envCmd.AddCommand(nukeCmd)
+	nukeCmd.Flags().BoolVarP(&skipConfirmation, "yes", "y", false, "Skip confirmation prompt")
 }
 
 func runNuke(cmd *cobra.Command, args []string) error {
@@ -43,25 +48,27 @@ func runNuke(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("nix is not installed. No need to run nuke")
 	}
 
-	// Prompt user for confirmation
-	fmt.Fprintf(cmd.OutOrStdout(), "⚠️  WARNING: This will completely remove camp and Nix from your system!\n\n")
-	fmt.Fprintf(cmd.OutOrStdout(), "This will delete:\n")
-	fmt.Fprintf(cmd.OutOrStdout(), "  • Nix package manager\n")
-	fmt.Fprintf(cmd.OutOrStdout(), "  • All camp configuration (~/.camp/)\n")
-	fmt.Fprintf(cmd.OutOrStdout(), "  • home-manager configuration and state\n")
-	fmt.Fprintf(cmd.OutOrStdout(), "  • Nix state directories\n\n")
-	fmt.Fprintf(cmd.OutOrStdout(), "Are you sure you want to continue? [y/N]: ")
+	// Prompt user for confirmation (unless --yes flag is used)
+	if !skipConfirmation {
+		fmt.Fprintf(cmd.OutOrStdout(), "⚠️  WARNING: This will completely remove camp and Nix from your system!\n\n")
+		fmt.Fprintf(cmd.OutOrStdout(), "This will delete:\n")
+		fmt.Fprintf(cmd.OutOrStdout(), "  • Nix package manager\n")
+		fmt.Fprintf(cmd.OutOrStdout(), "  • All camp configuration (~/.camp/)\n")
+		fmt.Fprintf(cmd.OutOrStdout(), "  • home-manager configuration and state\n")
+		fmt.Fprintf(cmd.OutOrStdout(), "  • Nix state directories\n\n")
+		fmt.Fprintf(cmd.OutOrStdout(), "Are you sure you want to continue? [y/N]: ")
 
-	reader := bufio.NewReader(cmd.InOrStdin())
-	response, err := reader.ReadString('\n')
-	if err != nil {
-		return fmt.Errorf("failed to read confirmation: %w", err)
-	}
+		reader := bufio.NewReader(cmd.InOrStdin())
+		response, err := reader.ReadString('\n')
+		if err != nil {
+			return fmt.Errorf("failed to read confirmation: %w", err)
+		}
 
-	response = strings.TrimSpace(strings.ToLower(response))
-	if response != "y" && response != "yes" {
-		fmt.Fprintf(cmd.OutOrStdout(), "\nNuke operation cancelled.\n")
-		return nil
+		response = strings.TrimSpace(strings.ToLower(response))
+		if response != "y" && response != "yes" {
+			fmt.Fprintf(cmd.OutOrStdout(), "\nNuke operation cancelled.\n")
+			return nil
+		}
 	}
 
 	// Get current user context
