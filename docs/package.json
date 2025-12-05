@@ -1,0 +1,30 @@
+{
+  "comments": {
+    "dependencies": {
+      "@fortawesome/fontawesome-free": "project",
+      "bootstrap": "project"
+    },
+    "devDependencies": {
+      "autoprefixer": "project",
+      "postcss": "project",
+      "postcss-cli": "project"
+    }
+  },
+  "dependencies": {
+    "@fortawesome/fontawesome-free": "^6.7.0",
+    "bootstrap": "^5.3.0"
+  },
+  "description": "Camp documentation",
+  "devDependencies": {
+    "autoprefixer": "^10.4.14",
+    "postcss": "^8.4.24",
+    "postcss-cli": "^11.0.0"
+  },
+  "name": "camp-docs",
+  "scripts": {
+    "build": "hugo --minify",
+    "postinstall": "hugo mod npm pack",
+    "serve": "hugo server"
+  },
+  "version": "1.0.0"
+}

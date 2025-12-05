@@ -57,7 +57,7 @@ camp/
 - Write comprehensive unit tests for all commands
 - Keep command logic in the `cmd/` package
 - Main entry point should be minimal, just calling `cmd.Execute()`
-- When new features are added or changed, make sure to update the documentation in `doc/` folder.
+- When new features are added or changed, make sure to update the documentation (see Documentation Updates section below).
 
 ## Testing Guidelines
 - Test command names, descriptions, and output
@@ -976,6 +976,155 @@ For detailed help on any command:
 camp <command> --help
 # Example: camp env rebuild --help
 ```
+
+## Documentation Updates
+
+Camp uses Hugo + Docsy for documentation hosted at GitHub Pages. When making changes to Camp, you MUST update the documentation accordingly.
+
+### Documentation Location
+
+The documentation is in the `docs/` directory:
+- **User documentation**: `docs/content/en/docs/`
+- **Developer documentation**: `docs/content/en/docs/developer-guide/`
+- **Blog posts**: `docs/content/en/blog/`
+
+### When to Update Documentation
+
+**ALWAYS update documentation when:**
+
+1. **Adding a new feature**:
+   - Add to relevant User Guide section (`docs/content/en/docs/user-guide/`)
+   - Update CLI reference if adding a command (`docs/content/en/docs/reference/cli-reference.md`)
+   - Update Getting Started if it affects initial setup
+   - Include usage examples
+
+2. **Adding a new command**:
+   - Create detailed command page in `docs/content/en/docs/user-guide/commands/`
+   - Update CLI reference
+   - Add to command overview page
+
+3. **Modifying configuration**:
+   - Update configuration schema (`docs/content/en/docs/reference/configuration-schema.md`)
+   - Update configuration guide with examples
+   - Update this CLAUDE.md file if it affects development
+
+4. **Changing behavior**:
+   - Update affected user guide sections
+   - Add migration notes if breaking change
+   - Update examples if they no longer work
+
+5. **Fixing bugs**:
+   - Update troubleshooting sections if it's a common issue
+   - Correct any incorrect examples
+
+### Documentation Structure
+
+```
+docs/
+├── content/en/
+│   ├── docs/
+│   │   ├── getting-started/     # Installation, quickstart, configuration
+│   │   ├── user-guide/          # Feature guides (commands, packages, flakes, etc.)
+│   │   ├── developer-guide/     # Contributing, architecture, testing
+│   │   └── reference/           # CLI reference, configuration schema
+│   └── blog/                    # Release notes, tutorials
+├── config.toml                  # Hugo configuration
+└── README.md                    # Docs setup instructions
+```
+
+### Testing Documentation Locally
+
+Before submitting changes:
+
+```bash
+cd docs
+
+# Install Hugo (if not already installed)
+brew install hugo  # macOS
+
+# Run local server
+hugo server
+
+# Visit http://localhost:1313/camp/
+```
+
+Verify:
+- Documentation builds without errors
+- Links work correctly
+- Code examples are accurate
+- Formatting looks correct
+
+### Documentation Guidelines
+
+See `docs/DOCS_GUIDELINES.md` for detailed guidelines on:
+- Writing style and formatting
+- When to update which sections
+- How to structure documentation
+- Code example conventions
+- Front matter requirements
+
+### Automatic Deployment
+
+Documentation is automatically deployed when:
+- Changes are merged to `main` branch
+- Changes are made to `docs/` directory
+
+GitHub Actions will:
+1. Build the Hugo site
+2. Deploy to GitHub Pages at `https://tbueno.github.io/camp/`
+
+### CI Checks for Documentation
+
+Pull requests that modify `docs/` are automatically checked for:
+- Hugo build errors
+- Markdown linting
+- Spell checking
+- Broken links
+
+Fix any CI failures before merging.
+
+### Key Documentation Files
+
+When you make specific changes, update these files:
+
+| Change Type | Files to Update |
+|-------------|----------------|
+| New command | `docs/content/en/docs/user-guide/commands/<cmd>.md`<br>`docs/content/en/docs/reference/cli-reference.md` |
+| New config option | `docs/content/en/docs/reference/configuration-schema.md`<br>`docs/content/en/docs/getting-started/configuration.md` |
+| New feature | Relevant section in `docs/content/en/docs/user-guide/`<br>Update Getting Started if needed |
+| Architecture change | `docs/content/en/docs/developer-guide/architecture.md`<br>This CLAUDE.md file |
+| Breaking change | Add migration guide<br>Update affected docs<br>Note in CHANGELOG |
+
+### Example: Adding a New Feature
+
+When adding a new feature like "custom Nix channels":
+
+1. **Implement the feature** in Go code
+2. **Write tests** for the feature
+3. **Update documentation**:
+   ```bash
+   # Create user guide page
+   touch docs/content/en/docs/user-guide/custom-channels.md
+
+   # Update relevant sections
+   # - Add to user guide index
+   # - Update configuration examples
+   # - Add to configuration schema
+   ```
+4. **Test documentation locally**:
+   ```bash
+   cd docs && hugo server
+   ```
+5. **Submit PR** with both code and docs changes
+
+### Documentation Best Practices
+
+- **Write as you code**: Update docs in the same PR as code changes
+- **Test examples**: Ensure all code examples actually work
+- **Use clear language**: Write for users, not developers
+- **Add troubleshooting**: Include common issues and solutions
+- **Link related content**: Help users discover related features
+- **Keep it current**: Remove outdated information
 
 ## Migration from Optishell
 

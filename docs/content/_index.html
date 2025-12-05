@@ -1,0 +1,83 @@
++++
+title = "Camp"
+linkTitle = "Camp"
++++
+
+{{< blocks/cover title="⛺ Camp" image_anchor="top" height="full" color="primary" >}}
+<div class="mx-auto">
+	<a class="btn btn-lg btn-primary mr-3 mb-4" href="{{< relref "docs" >}}">
+		Learn More <i class="fas fa-arrow-alt-circle-right ml-2"></i>
+	</a>
+	<a class="btn btn-lg btn-secondary mr-3 mb-4" href="https://github.com/tbueno/camp">
+		GitHub <i class="fab fa-github ml-2 "></i>
+	</a>
+	<p class="lead mt-5">Your all-in-one development environment manager</p>
+	{{< blocks/link-down color="info" >}}
+</div>
+{{< /blocks/cover >}}
+
+
+{{% blocks/lead color="secondary" %}}
+Camp is a command-line tool designed to help developers manage their isolated development environments.
+
+Built with Go and powered by Nix, Camp provides essential system information and environment management utilities.
+{{% /blocks/lead %}}
+
+{{< blocks/section color="dark" >}}
+{{% blocks/feature icon="fa-lightbulb" title="Simple Configuration" %}}
+Manage your development environment with a single YAML file.
+
+Configure environment variables, packages, and external Nix flakes all in one place.
+{{% /blocks/feature %}}
+
+{{% blocks/feature icon="fa-boxes" title="Package Management" %}}
+Declaratively manage Nix packages across macOS and Linux.
+
+Install and update packages with a simple rebuild command.
+{{% /blocks/feature %}}
+
+{{% blocks/feature icon="fab fa-nix" title="Nix-Powered" %}}
+Built on Nix for reproducible, reliable environments.
+
+Works with nix-darwin on macOS and home-manager on Linux.
+{{% /blocks/feature %}}
+
+{{< /blocks/section >}}
+
+
+{{< blocks/section >}}
+<div class="col">
+<h2 class="text-center pb-3">Quick Start</h2>
+<p class="text-center">Get started with Camp in minutes</p>
+
+{{< highlight bash >}}
+# Clone the repository
+git clone https://github.com/tbueno/camp
+cd camp
+
+# Build from source
+go build -o camp
+
+# Install
+go install
+
+# Bootstrap your environment
+camp bootstrap
+{{< /highlight >}}
+
+</div>
+{{< /blocks/section >}}
+
+{{< blocks/section color="primary" >}}
+{{% blocks/feature icon="fab fa-github" title="Open Source" url="https://github.com/tbueno/camp" %}}
+Camp is open source and welcomes contributions on **GitHub**.
+{{% /blocks/feature %}}
+
+{{% blocks/feature icon="fa-book" title="Documentation" url="/docs/" %}}
+Check out our comprehensive documentation to learn more.
+{{% /blocks/feature %}}
+
+{{% blocks/feature icon="fa-users" title="Community" url="https://github.com/tbueno/camp/discussions" %}}
+Join the discussion and get help from the community.
+{{% /blocks/feature %}}
+{{< /blocks/section >}}

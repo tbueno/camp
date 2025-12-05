@@ -1,10 +1,6 @@
 {
   "lockfile_version": "1",
   "packages": {
-    "github:NixOS/nixpkgs/nixpkgs-unstable": {
-      "last_modified": "2025-11-08T12:28:21Z",
-      "resolved": "github:NixOS/nixpkgs/f6b44b2401525650256b977063dbcf830f762369?lastModified=1762604901"
-    },
     "go@latest": {
       "last_modified": "2025-10-22T20:59:19Z",
       "resolved": "github:NixOS/nixpkgs/01b6809f7f9d1183a2b3e081f0a1e6f8f415cb09#go",
@@ -50,6 +46,54 @@
             }
           ],
           "store_path": "/nix/store/k1kn1c59ss7nq6agdppzq3krwmi3xqy4-go-1.25.2"
+        }
+      }
+    },
+    "hugo@latest": {
+      "last_modified": "2025-11-23T21:50:36Z",
+      "resolved": "github:NixOS/nixpkgs/ee09932cedcef15aaf476f9343d1dea2cb77e261#hugo",
+      "source": "devbox-search",
+      "version": "0.152.2",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/w7i107m90gn3aiq35jbgq6lbnlsxpz4s-hugo-0.152.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/w7i107m90gn3aiq35jbgq6lbnlsxpz4s-hugo-0.152.2"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/5mjq7a6y3axm5014zh28jyji3mpi5wrl-hugo-0.152.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/5mjq7a6y3axm5014zh28jyji3mpi5wrl-hugo-0.152.2"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/3qw3lqh4ap709f93xgbhpw6xm6qjdqza-hugo-0.152.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/3qw3lqh4ap709f93xgbhpw6xm6qjdqza-hugo-0.152.2"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/22bglxh2smwy0b4rpqq88kbq4zvdq6lq-hugo-0.152.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/22bglxh2smwy0b4rpqq88kbq4zvdq6lq-hugo-0.152.2"
         }
       }
     }
