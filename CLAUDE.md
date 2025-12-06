@@ -11,7 +11,11 @@ Camp is a command line application built with Go and the Cobra CLI framework. It
 ## Project Structure
 ```
 camp/
-├── go.mod                 # Go module definition
+├── .github/
+│   └── workflows/
+│       └── release.yml   # GitHub Actions workflow for releases
+├── .goreleaser.yaml      # GoReleaser configuration
+├── go.mod                # Go module definition
 ├── main.go               # Application entry point
 └── cmd/
     ├── root.go           # Root command implementation
@@ -42,3 +46,47 @@ camp/
 ## Current Commands
 
 The source code commands can be executes with the command `go run main.go <command>`. Running the command `go run main.go` will display the help message for all the commands.
+
+## Release Process
+
+Camp uses [GoReleaser](https://goreleaser.com/) for automated releases via GitHub Actions.
+
+### Creating a Release
+
+1. **Tag the release** (use semantic versioning):
+   ```bash
+   git tag -a v1.0.0 -m "Release v1.0.0"
+   git push origin v1.0.0
+   ```
+
+2. **GitHub Actions will automatically**:
+   - Build binaries for Linux (amd64, arm64) and macOS (arm64)
+   - Create GitHub release with changelog
+   - Upload release artifacts
+   - Publish to Homebrew tap at `tbueno/homebrew-tap`
+
+### Release Types
+- **Stable releases**: `v1.0.0`, `v2.1.3`
+- **Pre-releases**: `v1.0.0-rc1`, `v2.0.0-beta1` (automatically marked as pre-release)
+
+### Installation via Homebrew
+
+Once released, users can install camp via:
+```bash
+brew tap tbueno/tap
+brew install camp
+```
+
+### Setup Requirements
+
+**First-time setup** (already configured):
+- ✅ `.goreleaser.yaml` configuration
+- ✅ `.github/workflows/release.yml` workflow
+- ✅ Version variables in `main.go`
+
+**Manual setup required**:
+1. Create the homebrew-tap repository at `github.com/tbueno/homebrew-tap`
+2. Add `HOMEBREW_TAP_TOKEN` secret to this repository:
+   - Go to GitHub Settings → Developer settings → Personal access tokens
+   - Create a token with `repo` permissions
+   - Add it as a secret named `HOMEBREW_TAP_TOKEN` in camp repository settings
