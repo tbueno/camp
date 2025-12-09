@@ -15,6 +15,10 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Patch Docsy theme to disable Hugo Module imports
+        run: |
+          sed -i 's/disable: false/disable: true/g' docs/themes/docsy/hugo.yaml
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -37,7 +41,8 @@ jobs:
       - name: Check for broken links
         uses: lycheeverse/lychee-action@v1
         with:
-          args: --verbose --no-progress './docs/public/**/*.html'
+          # Only check internal links, exclude the baseURL since it won't exist until deployment
+          args: --verbose --no-progress --exclude 'https://tbueno.github.io/camp' './docs/public/**/*.html'
           fail: true
         env:
           GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
@@ -63,5 +68,5 @@ jobs:
         uses: streetsidesoftware/cspell-action@v5
         with:
           files: 'docs/content/**/*.md'
-          config: '.cspell.json'
+          config: 'docs/cspell.json'
           incremental_files_only: false

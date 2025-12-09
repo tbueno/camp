@@ -30,7 +30,7 @@ The command displays:
 
 ## Example Output
 
-```
+```text
 User Information:
   Name: bueno
   Home Directory: /Users/bueno
@@ -59,4 +59,4 @@ Packages:
 ## Related Commands
 
 - [`camp env rebuild`](../rebuild/) - Apply your configuration
-- [`camp bootstrap`](../bootstrap/) - Initial setup
+<!-- - [`camp bootstrap`](../bootstrap/) - Initial setup -->

@@ -6,7 +6,8 @@ description: >
   Managing Nix packages with Camp
 ---
 
-Camp allows you to declaratively manage Nix packages through your configuration file.
+Camp allows you to declaratively manage Nix packages through your
+configuration file.
 
 ## Overview
 
@@ -20,6 +21,7 @@ packages:
 ```
 
 After running `camp env rebuild`, these packages are:
+
 - Installed via home-manager
 - Available in your PATH
 - Managed declaratively (no manual `nix-env -i` needed)
@@ -39,13 +41,13 @@ packages:
   - bat
 ```
 
-2. Apply the changes:
+1. Apply the changes:
 
 ```bash
 camp env rebuild
 ```
 
-3. Verify installation:
+1. Verify installation:
 
 ```bash
 which nvim
@@ -235,7 +237,8 @@ nix search nixpkgs nodejs
 
 ### Pinning Nixpkgs Version
 
-Camp uses nixpkgs-unstable by default. To use a specific nixpkgs version, you would need to modify the generated flake.nix (advanced).
+Camp uses nixpkgs-unstable by default. To use a specific nixpkgs
+version, you would need to modify the generated flake.nix (advanced).
 
 ## Removing Packages
 
@@ -317,7 +320,7 @@ packages:
 
 ### Package Not Found
 
-```
+```nix
 error: attribute 'packagename' missing
 ```
 
@@ -329,7 +332,7 @@ nix search nixpkgs packagename
 
 ### Duplicate Package Error
 
-```
+```yaml
 Error: duplicate package 'git' - package names must be unique
 ```
 
@@ -337,7 +340,7 @@ Error: duplicate package 'git' - package names must be unique
 
 ### Invalid Package Name
 
-```
+```yaml
 Error: package 'my package' has invalid format
 ```
 
@@ -354,6 +357,8 @@ Error: package 'my package' has invalid format
 
 ## Next Steps
 
-- Learn about [Flakes](/docs/user-guide/flakes/) for more advanced package management
-- See the [Configuration Schema](/docs/reference/configuration-schema/) for all options
+- Learn about [Flakes](/docs/user-guide/flakes/) for more advanced
+  package management
+- See the [Configuration Schema](/docs/reference/configuration-schema/)
+  for all options
 - Check out [Commands](/docs/user-guide/commands/) for rebuild workflow

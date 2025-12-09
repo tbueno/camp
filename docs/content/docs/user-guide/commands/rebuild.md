@@ -36,18 +36,20 @@ The rebuild process:
 ## Prerequisites
 
 ### macOS
+
 - Nix package manager installed
 - nix-darwin configured
 - Flakes enabled in Nix configuration
 
 ### Linux
+
 - Nix package manager installed
 - home-manager configured
 - Flakes enabled in Nix configuration
 
 ## Rebuild Process Flow
 
-```
+```text
 camp env rebuild
      ↓
 Load ~/.camp/camp.yml
@@ -127,7 +129,8 @@ nix search nixpkgs package-name
 
 ### Permission errors
 
-On macOS, nix-darwin may require sudo for system-level changes. Ensure your user has the necessary permissions.
+On macOS, nix-darwin may require sudo for system-level changes.
+Ensure your user has the necessary permissions.
 
 ## Performance Tips
 
@@ -137,6 +140,6 @@ On macOS, nix-darwin may require sudo for system-level changes. Ensure your user
 
 ## Related Commands
 
-- [`camp env`](../env/) - View current configuration
-- [`camp env update`](../update/) - Update flake dependencies
-- [`camp bootstrap`](../bootstrap/) - Initial setup
+- [`camp env`](../) - View environment commands
+<!-- - [`camp env update`](../update/) - Update flake dependencies -->
+<!-- - [`camp bootstrap`](../bootstrap/) - Initial setup -->

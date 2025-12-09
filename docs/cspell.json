@@ -1,0 +1,37 @@
+{
+  "version": "0.2",
+  "language": "en",
+  "words": [
+    "devbox",
+    "direnv",
+    "Errorf",
+    "Fprintln",
+    "GOPATH",
+    "golangci",
+    "gopls",
+    "ipython",
+    "macbook",
+    "myuser",
+    "neovim",
+    "newcommand",
+    "nixpkgs",
+    "numpy",
+    "nvim",
+    "packagename",
+    "pandoc",
+    "pkgs",
+    "Println",
+    "pyright",
+    "rustc",
+    "tbueno",
+    "virtualenv",
+    "zoxide"
+  ],
+  "ignorePaths": [
+    "node_modules/**",
+    "public/**",
+    "resources/**",
+    "themes/**",
+    ".git/**"
+  ]
+}

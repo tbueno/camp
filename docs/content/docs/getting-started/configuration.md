@@ -56,6 +56,7 @@ env:
 ```
 
 These variables are:
+
 - Injected into your Nix environment
 - Available in all shells after rebuild
 - Managed by home-manager
@@ -87,6 +88,7 @@ packages:
 ```
 
 Package names:
+
 - Must be valid Nix package identifiers
 - Support attribute paths (e.g., `python3Packages.requests`)
 - Are deduplicated automatically
@@ -119,6 +121,7 @@ camp env rebuild
 ```
 
 This will:
+
 1. Reload your `camp.yml`
 2. Generate Nix configurations
 3. Rebuild your environment with the new settings
@@ -177,4 +180,5 @@ flakes:
 
 - Learn more about [Package Management](/docs/user-guide/packages/)
 - Explore [Flakes](/docs/user-guide/flakes/) for advanced configuration
-- See the [Configuration Schema](/docs/reference/configuration-schema/) for all options
+- See the [Configuration Schema](/docs/reference/configuration-schema/)
+  for all options

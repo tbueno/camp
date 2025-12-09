@@ -1,240 +1,86 @@
 # Camp Documentation
 
-This directory contains the source for Camp's documentation website, built with [Hugo](https://gohugo.io/) and the [Docsy theme](https://www.docsy.dev/).
+This directory contains the Camp project documentation built with [Hugo](https://gohugo.io/) and the [Docsy](https://www.docsy.dev/) theme.
 
-## Quick Start
+## Prerequisites
 
-### Prerequisites
+- [Hugo](https://gohugo.io/installation/) (extended version)
+- [Node.js](https://nodejs.org/) v20 or later
+- npm (comes with Node.js)
 
-- **Hugo Extended** (v0.110.0 or later)
-  ```bash
-  # macOS
-  brew install hugo
+## Setup
 
-  # Or download from https://github.com/gohugoio/hugo/releases
-  ```
-
-- **Git** (for Docsy theme submodule)
-
-### Initial Setup
-
-1. **Clone with submodules** (if you haven't already):
+1. Install npm dependencies:
    ```bash
-   git clone --recurse-submodules https://github.com/tbueno/camp
-   cd camp/docs
+   npm ci
    ```
 
-2. **Or initialize submodules** (if already cloned):
+2. Initialize git submodules (for the Docsy theme):
    ```bash
    git submodule update --init --recursive
    ```
 
-### Local Development
+## Building
 
-Run the Hugo development server:
+### Quick Build
+
+Use the provided build script:
 
 ```bash
-cd docs
+./build.sh
+```
+
+This script automatically:
+- Patches the Docsy theme to disable Hugo Module imports (we use npm packages instead)
+- Builds the documentation with minification
+
+### Manual Build
+
+If you prefer to build manually:
+
+```bash
+# Patch Docsy theme (only needed once after git submodule update)
+sed -i.bak 's/disable: false/disable: true/g' themes/docsy/hugo.yaml
+
+# Build
+hugo --minify
+```
+
+## Development Server
+
+To run a local development server with live reload:
+
+```bash
+# Make sure the theme is patched first (see above)
+./build.sh  # patches theme if needed
+
+# Then run the server
 hugo server
 ```
 
-Then visit: http://localhost:1313/camp/
+Visit http://localhost:1313/camp/ to view the documentation.
 
-The server will auto-reload when you make changes.
+## Architecture Notes
 
-### Building
+### Why patch the Docsy theme?
 
-Build the static site:
+The Docsy theme's `hugo.yaml` defines Hugo Module imports for Bootstrap and Font-Awesome. However, we use npm packages for these dependencies instead of Hugo Modules. The patch disables these module imports to prevent Hugo from trying to fetch them as Hugo Modules, which would fail in CI.
 
-```bash
-cd docs
-hugo
-```
+### npm vs Hugo Modules
 
-Output will be in `docs/public/`.
+We use npm packages because:
+- More stable and predictable dependency management
+- Works consistently across local development and CI
+- Easier to manage versions with package-lock.json
 
-## Documentation Structure
+The module mounts in `config.toml` map the npm packages to the vendor directories expected by Docsy.
 
-```
-docs/
-├── content/en/              # English documentation
-│   ├── _index.html          # Homepage
-│   ├── docs/                # Main documentation
-│   │   ├── getting-started/ # Installation, quickstart
-│   │   ├── user-guide/      # Feature guides
-│   │   ├── developer-guide/ # Contributing, architecture
-│   │   └── reference/       # CLI reference, schemas
-│   └── blog/                # Release notes, tutorials
-├── static/                  # Static assets (images, etc.)
-├── layouts/                 # Custom Hugo layouts (if needed)
-├── config.toml             # Hugo configuration
-├── themes/docsy/           # Docsy theme (git submodule)
-└── README.md               # This file
-```
+## CI/CD
 
-## Writing Documentation
+GitHub Actions workflows automatically:
+1. Check out the repository with submodules
+2. Patch the Docsy theme
+3. Install npm dependencies
+4. Build and deploy the documentation
 
-### Creating a New Page
-
-1. Create a markdown file in the appropriate section:
-   ```bash
-   # Example: new user guide page
-   touch content/en/docs/user-guide/new-feature.md
-   ```
-
-2. Add front matter:
-   ```markdown
-   ---
-   title: "Feature Name"
-   linkTitle: "Feature Name"
-   weight: 5
-   description: >
-     Brief description of the feature
-   ---
-
-   Content goes here...
-   ```
-
-3. Test locally with `hugo server`
-
-### Front Matter Fields
-
-- `title`: Full page title
-- `linkTitle`: Short title for navigation (optional)
-- `weight`: Order in navigation (lower numbers first)
-- `description`: Brief description for SEO and listings
-
-### Style Guidelines
-
-See [DOCS_GUIDELINES.md](DOCS_GUIDELINES.md) for detailed guidelines on:
-- Writing style
-- Formatting conventions
-- Code examples
-- When to update docs
-
-## Deployment
-
-### Automatic Deployment
-
-Documentation is automatically deployed to GitHub Pages when changes are pushed to the `main` branch.
-
-The workflow:
-1. Push to `main` (or merge PR)
-2. GitHub Actions builds the site
-3. Deploys to `https://tbueno.github.io/camp/`
-
-See [.github/workflows/deploy-docs.yml](../.github/workflows/deploy-docs.yml) for details.
-
-### Manual Deployment
-
-You can also manually trigger deployment:
-
-1. Go to GitHub Actions
-2. Select "Deploy Documentation" workflow
-3. Click "Run workflow"
-
-## CI Checks
-
-Pull requests that modify documentation are automatically checked for:
-
-- **Hugo build**: Ensures site builds without errors
-- **Markdown linting**: Checks markdown formatting
-- **Spell checking**: Catches typos
-- **Link validation**: Finds broken links
-
-Fix any CI failures before merging.
-
-## Versioning
-
-### Version Management
-
-Documentation versions are managed in `config.toml`:
-
-```toml
-[[params.versions.list]]
-  version = "v1.0"
-  url = "https://tbueno.github.io/camp/v1.0/"
-[[params.versions.list]]
-  version = "main (development)"
-  url = "https://tbueno.github.io/camp/"
-```
-
-### Creating a Version
-
-When releasing a new version:
-
-1. Update the version list in `config.toml`
-2. Tag the documentation:
-   ```bash
-   git tag -a v1.0.0-docs -m "Documentation for v1.0.0"
-   git push origin v1.0.0-docs
-   ```
-
-## Theme Customization
-
-The Docsy theme is included as a git submodule. To customize:
-
-### Updating the Theme
-
-```bash
-cd docs/themes/docsy
-git pull origin main
-cd ../..
-git add themes/docsy
-git commit -m "Update Docsy theme"
-```
-
-### Custom Layouts
-
-Add custom layouts to `docs/layouts/` to override theme defaults.
-
-### Custom Styles
-
-Add custom CSS to `docs/assets/scss/_custom.scss` (create if needed).
-
-## Troubleshooting
-
-### Hugo build fails
-
-```bash
-# Check Hugo version (need extended version)
-hugo version
-
-# Should output something like:
-# hugo v0.120.0+extended darwin/arm64
-```
-
-### Submodule issues
-
-```bash
-# Reset submodules
-git submodule deinit -f .
-git submodule update --init --recursive
-```
-
-### Server doesn't auto-reload
-
-```bash
-# Try with --disableFastRender
-hugo server --disableFastRender
-```
-
-### Port already in use
-
-```bash
-# Use a different port
-hugo server --port 1314
-```
-
-## Resources
-
-- [Hugo Documentation](https://gohugo.io/documentation/)
-- [Docsy Theme Documentation](https://www.docsy.dev/)
-- [Markdown Guide](https://www.markdownguide.org/)
-- [Camp Documentation Guidelines](DOCS_GUIDELINES.md)
-
-## Getting Help
-
-- Check [DOCS_GUIDELINES.md](DOCS_GUIDELINES.md) for writing guidelines
-- Ask in [GitHub Discussions](https://github.com/tbueno/camp/discussions)
-- Open an issue with the `documentation` label
+See `.github/workflows/deploy-docs.yml` for details.

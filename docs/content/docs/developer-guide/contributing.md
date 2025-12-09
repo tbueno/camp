@@ -6,7 +6,8 @@ description: >
   How to contribute to Camp
 ---
 
-Thank you for your interest in contributing to Camp! This guide will help you get started.
+Thank you for your interest in contributing to Camp! This guide will
+help you get started.
 
 ## Ways to Contribute
 
@@ -28,7 +29,13 @@ cd camp
 
 ### 2. Set Up Development Environment
 
-See the [Development Setup](../development-setup/) guide.
+<!-- See the [Development Setup](../development-setup/) guide. -->
+
+Requirements:
+
+- Go 1.24.4 or later
+- Nix package manager
+- Git
 
 ### 3. Create a Branch
 
@@ -68,11 +75,12 @@ git commit -m "Add feature: support for custom Nix channels"
 ```
 
 **Good commit messages:**
+
 - Start with a verb (Add, Fix, Update, Remove)
 - Be specific about what changed
 - Reference issues when applicable
 
-```
+```text
 Add support for custom environment variables
 
 Implements #42. Users can now define custom environment variables
@@ -149,7 +157,7 @@ fmt.Fprintln(cmd.OutOrStdout(), "Output here")
 
 ### Package Organization
 
-```
+```text
 camp/
 ├── cmd/                 # CLI commands (Cobra)
 │   ├── root.go
@@ -322,4 +330,5 @@ Logs, screenshots, etc.
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the Apache License 2.0.
+By contributing, you agree that your contributions will be licensed
+under the Apache License 2.0.

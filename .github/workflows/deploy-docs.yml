@@ -32,6 +32,10 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
+      - name: Patch Docsy theme to disable Hugo Module imports
+        run: |
+          sed -i 's/disable: false/disable: true/g' docs/themes/docsy/hugo.yaml
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -45,14 +49,16 @@ jobs:
           hugo-version: 'latest'
           extended: true
 
-      - name: Install dependencies and build
+      - name: Install npm dependencies
+        working-directory: docs
+        run: npm ci
+
+      - name: Build documentation
         working-directory: docs
         env:
           HUGO_ENVIRONMENT: production
           HUGO_ENV: production
-        run: |
-          npm ci
-          hugo --minify --baseURL "${{ steps.pages.outputs.base_url }}/"
+        run: hugo --minify --baseURL "${{ steps.pages.outputs.base_url }}/"
 
       - name: Setup Pages
         id: pages

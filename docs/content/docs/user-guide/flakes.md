@@ -6,7 +6,9 @@ description: >
   Integrating external Nix flakes with Camp
 ---
 
-Camp supports integrating external Nix flakes to extend your development environment with custom packages, configurations, and modules.
+Camp supports integrating external Nix flakes to extend your
+development environment with custom packages, configurations, and
+modules.
 
 ## What are Flakes?
 
@@ -98,6 +100,7 @@ Applies to your user environment via home-manager:
 - Dotfiles, shell configs, development tools
 
 **Common output names:**
+
 - `packages`
 - `homeManagerModules.default`
 - `homeManagerModules.{name}`
@@ -112,6 +115,7 @@ Applies to system configuration via nix-darwin:
 - System packages, LaunchDaemons, system preferences
 
 **Common output names:**
+
 - `darwinModules.default`
 - `darwinModules.{name}`
 
@@ -153,19 +157,20 @@ flakes:
 ### Automatic Arguments
 
 Camp always passes:
+
 - `userName` - Your system username
 - `hostName` - Your machine hostname
 - `home` - Your home directory path
 
 ### Supported Types
 
-| YAML Type | Example | Nix Output |
-|-----------|---------|------------|
-| String | `"hello"` | `"hello"` |
-| Boolean | `true` | `true` |
-| Integer | `42` | `42` |
-| Float | `3.14` | `3.14` |
-| List | `[a, b]` | `[ "a" "b" ]` |
+| YAML Type | Example     | Nix Output    |
+| --------- | ----------- | ------------- |
+| String    | `"hello"`   | `"hello"`     |
+| Boolean   | `true`      | `true`        |
+| Integer   | `42`        | `42`          |
+| Float     | `3.14`      | `3.14`        |
+| List      | `[a, b]`    | `[ "a" "b" ]` |
 
 ### External Flake Pattern
 
@@ -328,7 +333,7 @@ outputs = { nixpkgs, my-tools, ... }:
 
 ### Duplicate Flake Name
 
-```
+```yaml
 Error: duplicate flake name 'my-flake'
 ```
 
@@ -344,7 +349,7 @@ flakes:
 
 ### Invalid Flake Name
 
-```
+```yaml
 Error: invalid flake name 'my.flake'
 ```
 
@@ -359,7 +364,7 @@ Use only letters, numbers, hyphens, underscores:
 
 ### Empty URL
 
-```
+```yaml
 Error: flake 'my-flake' has empty URL
 ```
 
@@ -383,7 +388,7 @@ For private repos via SSH:
 
 ### Output Not Found
 
-```
+```yaml
 error: attribute 'packages' missing
 ```
 
@@ -404,6 +409,7 @@ nix flake show github:user/repo
 ## Example Flake Templates
 
 Check `templates/flakes/` in the Camp repository for:
+
 - Personal package examples
 - Team configuration templates
 - Parameterized flake examples

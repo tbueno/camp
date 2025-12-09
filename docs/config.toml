@@ -5,30 +5,8 @@ theme = ["docsy"]
 # Module configuration for npm packages (PostCSS mode)
 [module]
   proxy = "direct"
-  # Mount project directories
-  [[module.mounts]]
-    source = "content"
-    target = "content"
-  [[module.mounts]]
-    source = "static"
-    target = "static"
-  [[module.mounts]]
-    source = "layouts"
-    target = "layouts"
-  [[module.mounts]]
-    source = "data"
-    target = "data"
-  [[module.mounts]]
-    source = "assets"
-    target = "assets"
-  [[module.mounts]]
-    source = "i18n"
-    target = "i18n"
-  [[module.mounts]]
-    source = "archetypes"
-    target = "archetypes"
 
-  # Mount Bootstrap and Font Awesome from node_modules
+  # Mount npm packages to vendor directories expected by Docsy
   [[module.mounts]]
     source = "node_modules/bootstrap"
     target = "assets/vendor/bootstrap"
