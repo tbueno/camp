@@ -39,30 +39,24 @@ jobs:
           cache: 'npm'
           cache-dependency-path: docs/package.json
 
-      - name: Install npm dependencies
-        run: |
-          cd docs
-          npm install
-
       - name: Setup Hugo
-        uses: peaceiris/actions-hugo@v2
+        uses: peaceiris/actions-hugo@v3
         with:
           hugo-version: 'latest'
           extended: true
 
-      - name: Setup Pages
-        id: pages
-        uses: actions/configure-pages@v4
-
-      - name: Build with Hugo
+      - name: Install dependencies and build
+        working-directory: docs
         env:
           HUGO_ENVIRONMENT: production
           HUGO_ENV: production
         run: |
-          cd docs
-          hugo \
-            --minify \
-            --baseURL "${{ steps.pages.outputs.base_url }}/"
+          npm ci
+          hugo --minify --baseURL "${{ steps.pages.outputs.base_url }}/"
+
+      - name: Setup Pages
+        id: pages
+        uses: actions/configure-pages@v4
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
