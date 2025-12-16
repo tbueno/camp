@@ -2,6 +2,15 @@
 
 This document provides guidelines for maintaining and updating Camp's documentation.
 
+## Technology Stack
+
+- **Static Site Generator**: Hugo (Go-based, fast builds)
+- **Theme**: Docsy (designed for technical documentation, used by Kubernetes)
+- **Hosting**: GitHub Pages
+- **CI/CD**: GitHub Actions
+- **URL**: `https://tbueno.github.io/camp/`
+
+
 ## Documentation Structure
 
 ```
