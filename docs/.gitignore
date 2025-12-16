@@ -1,0 +1,15 @@
+# Hugo build output
+/public/
+/resources/
+
+# Hugo lock file
+.hugo_build.lock
+
+# npm dependencies
+node_modules/
+
+# OS files
+.DS_Store
+
+# Backup files from theme patching
+themes/docsy/hugo.yaml.bak
