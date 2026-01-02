@@ -1630,6 +1630,189 @@ func TestSaveConfig_WithPackages(t *testing.T) {
 	}
 }
 
+func TestFindProjectConfigPath_CurrentDir(t *testing.T) {
+	// Create temporary directory with .camp.yml
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".camp.yml")
+
+	// Create .camp.yml
+	yamlContent := `env:
+  TEST_VAR: "test"
+`
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("Failed to write config: %v", err)
+	}
+
+	// Find config starting from tmpDir
+	foundPath := FindProjectConfigPath(tmpDir)
+
+	if foundPath == "" {
+		t.Error("FindProjectConfigPath() should find .camp.yml in current directory")
+	}
+
+	if foundPath != configPath {
+		t.Errorf("FindProjectConfigPath() = %q, want %q", foundPath, configPath)
+	}
+}
+
+func TestFindProjectConfigPath_ParentDir(t *testing.T) {
+	// Create temporary directory structure:
+	// tmpDir/
+	//   .camp.yml
+	//   subdir/
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".camp.yml")
+	subDir := filepath.Join(tmpDir, "subdir")
+
+	// Create .camp.yml in parent
+	yamlContent := `env:
+  TEST_VAR: "test"
+`
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("Failed to write config: %v", err)
+	}
+
+	// Create subdirectory
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatalf("Failed to create subdir: %v", err)
+	}
+
+	// Find config starting from subdir
+	foundPath := FindProjectConfigPath(subDir)
+
+	if foundPath == "" {
+		t.Error("FindProjectConfigPath() should find .camp.yml in parent directory")
+	}
+
+	if foundPath != configPath {
+		t.Errorf("FindProjectConfigPath() = %q, want %q", foundPath, configPath)
+	}
+}
+
+func TestFindProjectConfigPath_MultipleParents(t *testing.T) {
+	// Create temporary directory structure:
+	// tmpDir/
+	//   .camp.yml
+	//   level1/
+	//     level2/
+	//       level3/
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".camp.yml")
+	level3Dir := filepath.Join(tmpDir, "level1", "level2", "level3")
+
+	// Create .camp.yml at root
+	yamlContent := `env:
+  TEST_VAR: "test"
+`
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("Failed to write config: %v", err)
+	}
+
+	// Create nested directories
+	if err := os.MkdirAll(level3Dir, 0755); err != nil {
+		t.Fatalf("Failed to create nested dirs: %v", err)
+	}
+
+	// Find config starting from level3
+	foundPath := FindProjectConfigPath(level3Dir)
+
+	if foundPath == "" {
+		t.Error("FindProjectConfigPath() should find .camp.yml walking up multiple levels")
+	}
+
+	if foundPath != configPath {
+		t.Errorf("FindProjectConfigPath() = %q, want %q", foundPath, configPath)
+	}
+}
+
+func TestFindProjectConfigPath_NotFound(t *testing.T) {
+	// Create temporary directory without .camp.yml
+	tmpDir := t.TempDir()
+
+	// Find config should return empty string
+	foundPath := FindProjectConfigPath(tmpDir)
+
+	if foundPath != "" {
+		t.Errorf("FindProjectConfigPath() should return empty string when not found, got %q", foundPath)
+	}
+}
+
+func TestFindProjectConfigPath_EmptyStartDir(t *testing.T) {
+	// Create temporary directory with .camp.yml
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".camp.yml")
+
+	yamlContent := `env:
+  TEST_VAR: "test"
+`
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("Failed to write config: %v", err)
+	}
+
+	// Change to tmpDir
+	oldWd, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(oldWd)
+
+	// Find config with empty string (should use current dir)
+	foundPath := FindProjectConfigPath("")
+
+	if foundPath == "" {
+		t.Error("FindProjectConfigPath(\"\") should use current directory")
+	}
+
+	// Resolve both paths to handle symlinks (e.g., /var vs /private/var on macOS)
+	foundPathResolved, _ := filepath.EvalSymlinks(foundPath)
+	configPathResolved, _ := filepath.EvalSymlinks(configPath)
+
+	if foundPathResolved != configPathResolved {
+		t.Errorf("FindProjectConfigPath(\"\") = %q, want %q", foundPath, configPath)
+	}
+}
+
+func TestFindProjectConfigPath_ClosestConfig(t *testing.T) {
+	// Create temporary directory structure:
+	// tmpDir/
+	//   .camp.yml (parent config)
+	//   subdir/
+	//     .camp.yml (child config - should find this one)
+	tmpDir := t.TempDir()
+	parentConfig := filepath.Join(tmpDir, ".camp.yml")
+	subDir := filepath.Join(tmpDir, "subdir")
+	childConfig := filepath.Join(subDir, ".camp.yml")
+
+	// Create parent config
+	parentYaml := `env:
+  LEVEL: "parent"
+`
+	if err := os.WriteFile(parentConfig, []byte(parentYaml), 0644); err != nil {
+		t.Fatalf("Failed to write parent config: %v", err)
+	}
+
+	// Create subdirectory and child config
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatalf("Failed to create subdir: %v", err)
+	}
+
+	childYaml := `env:
+  LEVEL: "child"
+`
+	if err := os.WriteFile(childConfig, []byte(childYaml), 0644); err != nil {
+		t.Fatalf("Failed to write child config: %v", err)
+	}
+
+	// Find config starting from subdir - should find child config, not parent
+	foundPath := FindProjectConfigPath(subDir)
+
+	if foundPath == "" {
+		t.Error("FindProjectConfigPath() should find .camp.yml")
+	}
+
+	if foundPath != childConfig {
+		t.Errorf("FindProjectConfigPath() should find closest config, got %q, want %q", foundPath, childConfig)
+	}
+}
+
 // Helper function for substring checking
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || containsMiddle(s, substr)))

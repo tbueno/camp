@@ -101,6 +101,45 @@ func LoadUserConfig(homeDir string) (*CampConfig, error) {
 	return DefaultConfig(), nil
 }
 
+// FindProjectConfigPath searches for .camp.yml starting from the given directory
+// and walking up the directory tree until finding one or reaching root.
+// Returns full path if found, empty string if not found.
+func FindProjectConfigPath(startDir string) string {
+	dir := startDir
+
+	// Handle empty start directory
+	if dir == "" {
+		var err error
+		dir, err = os.Getwd()
+		if err != nil {
+			return ""
+		}
+	}
+
+	// Convert to absolute path
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		return ""
+	}
+	dir = absDir
+
+	// Walk up directory tree
+	for {
+		configPath := filepath.Join(dir, ".camp.yml")
+		if _, err := os.Stat(configPath); err == nil {
+			return configPath
+		}
+
+		// Move to parent directory
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			// Reached root
+			return ""
+		}
+		dir = parent
+	}
+}
+
 // Validate checks if the configuration is valid
 func (c *CampConfig) Validate() error {
 	// Validate flakes configuration
