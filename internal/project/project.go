@@ -1,6 +1,7 @@
 package project
 
 import (
+	"camp/internal/system"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -30,8 +31,9 @@ type Component interface {
 }
 
 type Project struct {
-	Path   string
-	Config DevboxConfig
+	Path       string
+	Config     DevboxConfig       // Devbox configuration (for backward compatibility)
+	CampConfig *system.CampConfig // Camp project configuration (nil if not found)
 }
 
 func NewProject(p ...string) Project {
@@ -46,19 +48,32 @@ func NewProject(p ...string) Project {
 	} else {
 		path = p[0]
 	}
+
+	// Load devbox.json (existing logic)
 	devboxPath := filepath.Join(path, "devbox.json")
 	file, err := os.Open(devboxPath)
-	if err != nil {
-		return Project{Path: path}
+	var devboxConfig DevboxConfig
+	if err == nil {
+		defer file.Close()
+		byteValue, _ := io.ReadAll(file)
+		json.Unmarshal(byteValue, &devboxConfig)
 	}
-	defer file.Close()
 
-	byteValue, _ := io.ReadAll(file)
+	// Load .camp.yml (new logic)
+	var campConfig *system.CampConfig
+	campConfigPath := system.FindProjectConfigPath(path)
+	if campConfigPath != "" {
+		cfg, loadErr := system.LoadConfig(campConfigPath)
+		if loadErr == nil {
+			campConfig = cfg
+		}
+	}
 
-	var config DevboxConfig
-	json.Unmarshal(byteValue, &config)
-
-	return Project{Path: path, Config: config}
+	return Project{
+		Path:       path,
+		Config:     devboxConfig,
+		CampConfig: campConfig,
+	}
 }
 
 func (p *Project) Compatible() bool {
@@ -113,4 +128,18 @@ func (p *Project) Info() []string {
 		output = append(output, " - "+c)
 	}
 	return output
+}
+
+// HasCampConfig returns true if project has .camp.yml configuration
+func (p *Project) HasCampConfig() bool {
+	return p.CampConfig != nil
+}
+
+// EnvVars returns project environment variables from .camp.yml
+// Returns empty map if no camp config exists
+func (p *Project) EnvVars() map[string]string {
+	if p.CampConfig == nil || p.CampConfig.Env == nil {
+		return make(map[string]string)
+	}
+	return p.CampConfig.Env
 }
