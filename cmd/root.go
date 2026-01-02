@@ -26,4 +26,5 @@ func Execute() {
 func init() {
 	rootCmd.AddCommand(envCmd)
 	rootCmd.AddCommand(bootstrapCmd)
+	rootCmd.AddCommand(projectCmd)
 }
