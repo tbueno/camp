@@ -94,6 +94,38 @@ func CompileTemplate(templatePath string, data *TemplateData) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// CompileTemplateGeneric parses and renders a template file with any data type
+// This is a more flexible version of CompileTemplate that accepts custom function maps
+func CompileTemplateGeneric(templatePath string, data interface{}, customFuncs template.FuncMap) ([]byte, error) {
+	// Read template file
+	templateContent, err := os.ReadFile(templatePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read template file: %w", err)
+	}
+
+	// Merge default functions with custom functions
+	funcMap := template.FuncMap{
+		"renderNixValue": renderNixValue,
+	}
+	for name, fn := range customFuncs {
+		funcMap[name] = fn
+	}
+
+	// Parse template
+	tmpl, err := template.New(filepath.Base(templatePath)).Funcs(funcMap).Parse(string(templateContent))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse template: %w", err)
+	}
+
+	// Render template
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return nil, fmt.Errorf("failed to execute template: %w", err)
+	}
+
+	return buf.Bytes(), nil
+}
+
 // RenderFlakeTemplate renders the flake.nix template with user data
 // and saves it to ~/.camp/nix/flake.nix
 func RenderFlakeTemplate(user *User) error {
