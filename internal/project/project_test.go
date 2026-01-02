@@ -52,7 +52,7 @@ func TestProject(t *testing.T) {
 			}
 		})
 
-		t.Run("Whole message", func(t *testing.T) {
+		t.Run("Whole message without packages", func(t *testing.T) {
 			p := Project{Path: "../../optishell", Config: DevboxConfig{Shell: ShellConfig{Scripts: map[string][]string{"test": {"run tests"}}}}}
 			info := p.Info()
 			expected := []string{
@@ -62,6 +62,30 @@ func TestProject(t *testing.T) {
 			}
 			if !reflect.DeepEqual(info, expected) {
 				t.Errorf("expected %s, got %s", expected, info)
+			}
+		})
+
+		t.Run("Whole message with packages", func(t *testing.T) {
+			p := Project{
+				Path: "path/to/my-project",
+				Config: DevboxConfig{
+					Packages: []string{"go@latest", "hugo@latest"},
+					Shell: ShellConfig{
+						Scripts: map[string][]string{"test": {"run tests"}},
+					},
+				},
+			}
+			info := p.Info()
+			expected := []string{
+				"Project name: my-project",
+				"Packages:",
+				" - go@latest",
+				" - hugo@latest",
+				"Commands available through 'camp project [command]':",
+				" - test",
+			}
+			if !reflect.DeepEqual(info, expected) {
+				t.Errorf("expected %v, got %v", expected, info)
 			}
 		})
 	})

@@ -98,6 +98,16 @@ func (p *Project) CommandNames() []string {
 // Info returns the project name and the commands defined in the devbox.json file.
 func (p *Project) Info() []string {
 	output := []string{fmt.Sprintf("Project name: %s", p.Name())}
+
+	// Add packages information
+	if len(p.Config.Packages) > 0 {
+		output = append(output, "Packages:")
+		for _, pkg := range p.Config.Packages {
+			output = append(output, " - "+pkg)
+		}
+	}
+
+	// Add commands information
 	output = append(output, "Commands available through 'camp project [command]':")
 	for _, c := range p.CommandNames() {
 		output = append(output, " - "+c)
