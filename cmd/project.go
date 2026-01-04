@@ -94,6 +94,61 @@ func initCmd() *cobra.Command {
 	}
 }
 
+func syncCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "sync",
+		Short: "Sync .envrc from .camp.yml",
+		Long:  "Generate or update .envrc file from project configuration",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return syncProjectEnv()
+		},
+	}
+}
+
+func syncProjectEnv() error {
+	// Get current working directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current directory: %w", err)
+	}
+
+	// Find .camp.yml in current dir or parents
+	configPath := system.FindProjectConfigPath(cwd)
+	if configPath == "" {
+		return fmt.Errorf(".camp.yml not found in current directory or parents\nRun 'camp project init' to create one")
+	}
+
+	// Load project config
+	config, err := system.LoadConfig(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to load .camp.yml: %w", err)
+	}
+
+	// Generate .envrc content
+	envrcContent, err := system.GenerateEnvrc(cwd, config)
+	if err != nil {
+		return fmt.Errorf("failed to generate .envrc: %w", err)
+	}
+
+	// Write to .envrc in current directory
+	envrcPath := ".envrc"
+	if err := os.WriteFile(envrcPath, []byte(envrcContent), 0644); err != nil {
+		return fmt.Errorf("failed to write .envrc: %w", err)
+	}
+
+	// Count env vars
+	envVarCount := len(config.Env)
+
+	fmt.Println("✓ Generated .envrc from .camp.yml")
+	if envVarCount > 0 {
+		fmt.Printf("  Exported %d environment variable(s)\n", envVarCount)
+	}
+	fmt.Println("")
+	fmt.Println("⚠ Run 'direnv allow' to activate the environment")
+
+	return nil
+}
+
 func initProjectConfig() error {
 	// Check if .camp.yml already exists in current dir or parents
 	existingConfig := system.FindProjectConfigPath(".")
@@ -138,7 +193,7 @@ func validateArgs(args []string) error {
 	if len(args) == 0 {
 		return nil
 	}
-	subcommands := append(proj.CommandNames(), "info", "init")
+	subcommands := append(proj.CommandNames(), "info", "init", "sync")
 
 	for _, sub := range subcommands {
 		if args[0] == sub {
@@ -150,6 +205,7 @@ func validateArgs(args []string) error {
 
 func init() {
 	projectCmd.AddCommand(initCmd())
+	projectCmd.AddCommand(syncCmd())
 	projectCmd.AddCommand(infoCmd())
 	projectCmd.AddCommand(installCmd())
 	projectCmd.AddCommand(testCmd())
