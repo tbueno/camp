@@ -122,6 +122,14 @@ func (p *Project) Info() []string {
 		}
 	}
 
+	// Add environment variables from .camp.yml
+	if p.HasCampConfig() && len(p.EnvVars()) > 0 {
+		output = append(output, "Environment variables (.camp.yml):")
+		for key, value := range p.EnvVars() {
+			output = append(output, fmt.Sprintf(" - %s=%s", key, value))
+		}
+	}
+
 	// Add commands information
 	output = append(output, "Commands available through 'camp project [command]':")
 	for _, c := range p.CommandNames() {

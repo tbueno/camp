@@ -292,6 +292,156 @@ func TestHasCampConfig(t *testing.T) {
 	})
 }
 
+func TestInfo_WithEnvVars(t *testing.T) {
+	t.Run("info with env vars only", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create .camp.yml
+		campYaml := `env:
+  PROJECT_NAME: "test-project"
+  DEBUG: "true"
+`
+		campConfigPath := filepath.Join(tmpDir, ".camp.yml")
+		os.WriteFile(campConfigPath, []byte(campYaml), 0644)
+
+		// Create devbox.json for compatibility
+		devboxJson := `{
+  "shell": {
+    "scripts": {
+      "test": ["run tests"]
+    }
+  }
+}`
+		devboxPath := filepath.Join(tmpDir, "devbox.json")
+		os.WriteFile(devboxPath, []byte(devboxJson), 0644)
+
+		p := NewProject(tmpDir)
+		info := p.Info()
+
+		// Check that all expected sections are present
+		expectedSections := []string{
+			"Environment variables (.camp.yml):",
+			"Commands available through 'camp project [command]':",
+			" - test",
+		}
+		for _, section := range expectedSections {
+			found := false
+			for _, line := range info {
+				if line == section {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("Expected section '%s' not found in info output: %v", section, info)
+			}
+		}
+
+		// Check that env vars are present (order may vary in map iteration)
+		hasProjectName := false
+		hasDebug := false
+		for _, line := range info {
+			if line == " - PROJECT_NAME=test-project" {
+				hasProjectName = true
+			}
+			if line == " - DEBUG=true" {
+				hasDebug = true
+			}
+		}
+		if !hasProjectName {
+			t.Error("Expected PROJECT_NAME env var in info output")
+		}
+		if !hasDebug {
+			t.Error("Expected DEBUG env var in info output")
+		}
+	})
+
+	t.Run("info with packages and env vars", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create .camp.yml
+		campYaml := `env:
+  TEST_VAR: "test-value"
+`
+		campConfigPath := filepath.Join(tmpDir, ".camp.yml")
+		os.WriteFile(campConfigPath, []byte(campYaml), 0644)
+
+		// Create devbox.json
+		devboxJson := `{
+  "packages": ["go@latest"],
+  "shell": {
+    "scripts": {
+      "test": ["run tests"]
+    }
+  }
+}`
+		devboxPath := filepath.Join(tmpDir, "devbox.json")
+		os.WriteFile(devboxPath, []byte(devboxJson), 0644)
+
+		p := NewProject(tmpDir)
+		info := p.Info()
+
+		// Check that all expected sections are present
+		expectedSections := []string{
+			"Packages:",
+			" - go@latest",
+			"Environment variables (.camp.yml):",
+			" - TEST_VAR=test-value",
+			"Commands available through 'camp project [command]':",
+			" - test",
+		}
+		for _, section := range expectedSections {
+			found := false
+			for _, line := range info {
+				if line == section {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("Expected section '%s' not found in info output: %v", section, info)
+			}
+		}
+	})
+
+	t.Run("info without env vars", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create devbox.json only (no .camp.yml)
+		devboxJson := `{
+  "shell": {
+    "scripts": {
+      "test": ["run tests"]
+    }
+  }
+}`
+		devboxPath := filepath.Join(tmpDir, "devbox.json")
+		os.WriteFile(devboxPath, []byte(devboxJson), 0644)
+
+		p := NewProject(tmpDir)
+		info := p.Info()
+
+		// Should not have env vars section
+		for _, line := range info {
+			if line == "Environment variables (.camp.yml):" {
+				t.Error("Should not show env vars section when no .camp.yml exists")
+			}
+		}
+
+		// Should still have other sections
+		hasCommands := false
+		for _, line := range info {
+			if line == "Commands available through 'camp project [command]':" {
+				hasCommands = true
+				break
+			}
+		}
+		if !hasCommands {
+			t.Error("Should still show commands section")
+		}
+	})
+}
+
 func TestEnvVars(t *testing.T) {
 	t.Run("with env vars", func(t *testing.T) {
 		tmpDir := t.TempDir()
