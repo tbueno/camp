@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"camp/internal/project"
+	"camp/internal/system"
 	"camp/internal/utils"
 
 	"github.com/spf13/cobra"
@@ -81,13 +83,62 @@ func runProjectCommand(cmd string) error {
 	return utils.RunCommands(commands[cmd])
 }
 
+func initCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "init",
+		Short: "Initialize .camp.yml in current project",
+		Long:  "Create a .camp.yml configuration file with example settings",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return initProjectConfig()
+		},
+	}
+}
+
+func initProjectConfig() error {
+	// Check if .camp.yml already exists in current dir or parents
+	existingConfig := system.FindProjectConfigPath(".")
+	if existingConfig != "" {
+		return fmt.Errorf(".camp.yml already exists at %s", existingConfig)
+	}
+
+	// Create template config in current directory
+	configPath := ".camp.yml"
+	template := `# Camp project configuration
+# See https://tbueno.github.io/camp/docs/project-config
+
+# Project-specific environment variables
+# These are loaded via direnv when entering the directory
+env:
+  PROJECT_NAME: "my-project"
+  # Add your environment variables here
+  # Example:
+  # DATABASE_URL: "postgres://localhost/mydb"
+  # DEBUG: "true"
+
+# Future: packages, flakes, scripts will go here
+`
+
+	// Write to file
+	if err := os.WriteFile(configPath, []byte(template), 0644); err != nil {
+		return fmt.Errorf("failed to create .camp.yml: %w", err)
+	}
+
+	fmt.Println("✓ Created .camp.yml")
+	fmt.Println("  Next steps:")
+	fmt.Println("  1. Edit .camp.yml to add your environment variables")
+	fmt.Println("  2. Run 'camp project sync' to generate .envrc")
+	fmt.Println("  3. Run 'direnv allow' to activate the environment")
+
+	return nil
+}
+
 // validateArgs checks if the subcommand exists in the devbox.json file
 func validateArgs(args []string) error {
 	proj := project.NewProject()
 	if len(args) == 0 {
 		return nil
 	}
-	subcommands := append(proj.CommandNames(), "info")
+	subcommands := append(proj.CommandNames(), "info", "init")
 
 	for _, sub := range subcommands {
 		if args[0] == sub {
@@ -98,6 +149,7 @@ func validateArgs(args []string) error {
 }
 
 func init() {
+	projectCmd.AddCommand(initCmd())
 	projectCmd.AddCommand(infoCmd())
 	projectCmd.AddCommand(installCmd())
 	projectCmd.AddCommand(testCmd())
