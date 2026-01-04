@@ -2,13 +2,18 @@ package system
 
 import (
 	"bufio"
+	"embed"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"text/template"
 )
+
+//go:embed templates/.envrc.tmpl
+var envrcTemplateFS embed.FS
 
 // GetExportedVars parses input and returns environment variables
 func GetExportedVars(reader io.Reader) ([]EnvVar, error) {
@@ -74,20 +79,29 @@ func GenerateEnvrc(projectPath string, config *CampConfig) (string, error) {
 		EnvVars:   envVars,
 	}
 
-	// Register escapeEnvValue as a template function
-	funcMap := make(map[string]interface{})
-	funcMap["escapeEnvValue"] = escapeEnvValue
-
-	// Find template file (try absolute path first, then relative)
-	templatePath := "templates/files/.envrc.tmpl"
-
-	// Render template
-	result, err := CompileTemplateGeneric(templatePath, data, funcMap)
+	// Read embedded template
+	templateContent, err := envrcTemplateFS.ReadFile("templates/.envrc.tmpl")
 	if err != nil {
-		return "", fmt.Errorf("failed to render .envrc template: %w", err)
+		return "", fmt.Errorf("failed to read embedded template: %w", err)
 	}
 
-	return string(result), nil
+	// Create template with custom functions
+	funcMap := template.FuncMap{
+		"escapeEnvValue": escapeEnvValue,
+	}
+
+	tmpl, err := template.New(".envrc").Funcs(funcMap).Parse(string(templateContent))
+	if err != nil {
+		return "", fmt.Errorf("failed to parse template: %w", err)
+	}
+
+	// Execute template
+	var buf strings.Builder
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("failed to execute template: %w", err)
+	}
+
+	return buf.String(), nil
 }
 
 // escapeEnvValue escapes special characters in environment variable values
