@@ -101,4 +101,5 @@ func init() {
 	projectCmd.AddCommand(infoCmd())
 	projectCmd.AddCommand(installCmd())
 	projectCmd.AddCommand(testCmd())
+	projectCmd.AddCommand(activateCmd())
 }
