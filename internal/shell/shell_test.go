@@ -191,3 +191,26 @@ func TestFormatExport_Posix(t *testing.T) {
 		t.Errorf("FormatExport(posix) = %q, want %q", result, expected)
 	}
 }
+
+func TestFormatUnset(t *testing.T) {
+	tests := []struct {
+		name     string
+		shell    ShellType
+		varName  string
+		expected string
+	}{
+		{"bash", ShellBash, "FOO", "unset FOO;"},
+		{"zsh", ShellZsh, "BAR", "unset BAR;"},
+		{"posix", ShellPosix, "BAZ", "unset BAZ;"},
+		{"fish", ShellFish, "QUX", "set -e QUX;"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := FormatUnset(tt.shell, tt.varName)
+			if result != tt.expected {
+				t.Errorf("FormatUnset(%s) = %q, want %q", tt.shell, result, tt.expected)
+			}
+		})
+	}
+}

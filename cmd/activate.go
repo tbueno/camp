@@ -23,6 +23,9 @@ This command reads the camp.yaml file in the current directory and outputs
 shell-compatible export statements that can be evaluated to set environment
 variables.
 
+Variables that were previously exported but are no longer in the config will
+be unset automatically.
+
 Usage:
   eval "$(camp project activate)"
 
@@ -52,9 +55,32 @@ func runActivate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get current directory: %w", err)
 	}
 
+	// Determine shell type
+	var shellType shell.ShellType
+	if shellOverride != "" {
+		shellType = shell.ShellType(shellOverride)
+	} else {
+		shellType = shell.DetectShell()
+	}
+
+	// Load previously tracked vars
+	trackedVars, err := project.LoadTrackedVars(cwd)
+	if err != nil {
+		return fmt.Errorf("failed to load tracked vars: %w", err)
+	}
+
 	// Check if project config exists
 	if !project.HasProjectConfig(cwd) {
-		// Output nothing if no config - this allows safe eval even without config
+		// No config - unset all previously tracked vars and clear tracking
+		for _, varName := range trackedVars {
+			fmt.Fprintln(cmd.OutOrStdout(), shell.FormatUnset(shellType, varName))
+		}
+		// Clear tracking file if there were tracked vars
+		if len(trackedVars) > 0 {
+			if err := project.SaveTrackedVars(cwd, []string{}); err != nil {
+				return fmt.Errorf("failed to clear tracked vars: %w", err)
+			}
+		}
 		return nil
 	}
 
@@ -64,20 +90,14 @@ func runActivate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to load project config: %w", err)
 	}
 
-	// Check if there are any env vars to export
-	if len(config.Env) == 0 {
-		return nil
+	// Get removed vars and output unset statements
+	removedVars := project.GetRemovedVars(trackedVars, config.Env)
+	sort.Strings(removedVars)
+	for _, varName := range removedVars {
+		fmt.Fprintln(cmd.OutOrStdout(), shell.FormatUnset(shellType, varName))
 	}
 
-	// Determine shell type
-	var shellType shell.ShellType
-	if shellOverride != "" {
-		shellType = shell.ShellType(shellOverride)
-	} else {
-		shellType = shell.DetectShell()
-	}
-
-	// Sort keys for deterministic output
+	// Sort current keys for deterministic output
 	keys := make([]string, 0, len(config.Env))
 	for k := range config.Env {
 		keys = append(keys, k)
@@ -88,6 +108,11 @@ func runActivate(cmd *cobra.Command, args []string) error {
 	for _, key := range keys {
 		value := config.Env[key]
 		fmt.Fprintln(cmd.OutOrStdout(), shell.FormatExport(shellType, key, value))
+	}
+
+	// Save current var names for future tracking
+	if err := project.SaveTrackedVars(cwd, keys); err != nil {
+		return fmt.Errorf("failed to save tracked vars: %w", err)
 	}
 
 	return nil

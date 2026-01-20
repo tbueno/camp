@@ -50,6 +50,17 @@ func FormatExport(shell ShellType, name, value string) string {
 	}
 }
 
+// FormatUnset formats an environment variable unset statement for the given shell
+func FormatUnset(shell ShellType, name string) string {
+	switch shell {
+	case ShellFish:
+		return "set -e " + name + ";"
+	default:
+		// Bash, Zsh, and POSIX all use unset VAR
+		return "unset " + name + ";"
+	}
+}
+
 // escapeValue escapes special characters in the value for the given shell
 func escapeValue(shell ShellType, value string) string {
 	switch shell {

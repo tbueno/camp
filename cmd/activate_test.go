@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"camp/internal/project"
 )
 
 func TestActivateCmd(t *testing.T) {
@@ -270,6 +272,214 @@ func TestActivateCmdMetadata(t *testing.T) {
 		flag := cmd.Flags().Lookup("shell")
 		if flag == nil {
 			t.Error("Expected --shell flag to be defined")
+		}
+	})
+}
+
+func TestActivateCmdTracking(t *testing.T) {
+	t.Run("creates tracking file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "camp.yaml")
+
+		yamlContent := `env:
+  FOO: "bar"
+  BAZ: "qux"
+`
+		if err := os.WriteFile(configPath, []byte(yamlContent), 0644); err != nil {
+			t.Fatalf("Failed to write test config: %v", err)
+		}
+
+		original, _ := os.Getwd()
+		os.Chdir(tmpDir)
+		defer os.Chdir(original)
+
+		origShell := os.Getenv("SHELL")
+		os.Setenv("SHELL", "/bin/bash")
+		defer os.Setenv("SHELL", origShell)
+
+		var output bytes.Buffer
+		cmd := activateCmd()
+		cmd.SetOut(&output)
+
+		err := cmd.Execute()
+		if err != nil {
+			t.Fatalf("Command failed: %v", err)
+		}
+
+		// Verify tracking file was created
+		trackingPath := project.GetTrackingFilePath(tmpDir)
+		if _, err := os.Stat(trackingPath); os.IsNotExist(err) {
+			t.Error("Tracking file was not created")
+		}
+
+		// Verify tracked vars
+		tracked, err := project.LoadTrackedVars(tmpDir)
+		if err != nil {
+			t.Fatalf("Failed to load tracked vars: %v", err)
+		}
+
+		if len(tracked) != 2 {
+			t.Errorf("Expected 2 tracked vars, got %d", len(tracked))
+		}
+	})
+
+	t.Run("unsets removed vars", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "camp.yaml")
+
+		// First activation with FOO and BAR
+		yamlContent := `env:
+  FOO: "foo_value"
+  BAR: "bar_value"
+`
+		if err := os.WriteFile(configPath, []byte(yamlContent), 0644); err != nil {
+			t.Fatalf("Failed to write test config: %v", err)
+		}
+
+		original, _ := os.Getwd()
+		os.Chdir(tmpDir)
+		defer os.Chdir(original)
+
+		origShell := os.Getenv("SHELL")
+		os.Setenv("SHELL", "/bin/bash")
+		defer os.Setenv("SHELL", origShell)
+
+		// First run
+		var output1 bytes.Buffer
+		cmd1 := activateCmd()
+		cmd1.SetOut(&output1)
+		if err := cmd1.Execute(); err != nil {
+			t.Fatalf("First command failed: %v", err)
+		}
+
+		// Update config - remove BAR, keep FOO
+		yamlContent2 := `env:
+  FOO: "foo_value"
+`
+		if err := os.WriteFile(configPath, []byte(yamlContent2), 0644); err != nil {
+			t.Fatalf("Failed to write updated config: %v", err)
+		}
+
+		// Second run
+		var output2 bytes.Buffer
+		cmd2 := activateCmd()
+		cmd2.SetOut(&output2)
+		if err := cmd2.Execute(); err != nil {
+			t.Fatalf("Second command failed: %v", err)
+		}
+
+		result := output2.String()
+		// Should contain unset for BAR
+		if !strings.Contains(result, "unset BAR;") {
+			t.Errorf("Expected unset BAR, got: %s", result)
+		}
+		// Should still export FOO
+		if !strings.Contains(result, "export FOO=") {
+			t.Errorf("Expected export FOO, got: %s", result)
+		}
+	})
+
+	t.Run("unsets all vars when config removed", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "camp.yaml")
+
+		// First activation
+		yamlContent := `env:
+  VAR1: "value1"
+  VAR2: "value2"
+`
+		if err := os.WriteFile(configPath, []byte(yamlContent), 0644); err != nil {
+			t.Fatalf("Failed to write test config: %v", err)
+		}
+
+		original, _ := os.Getwd()
+		os.Chdir(tmpDir)
+		defer os.Chdir(original)
+
+		origShell := os.Getenv("SHELL")
+		os.Setenv("SHELL", "/bin/bash")
+		defer os.Setenv("SHELL", origShell)
+
+		// First run
+		var output1 bytes.Buffer
+		cmd1 := activateCmd()
+		cmd1.SetOut(&output1)
+		if err := cmd1.Execute(); err != nil {
+			t.Fatalf("First command failed: %v", err)
+		}
+
+		// Remove config file
+		os.Remove(configPath)
+
+		// Second run
+		var output2 bytes.Buffer
+		cmd2 := activateCmd()
+		cmd2.SetOut(&output2)
+		if err := cmd2.Execute(); err != nil {
+			t.Fatalf("Second command failed: %v", err)
+		}
+
+		result := output2.String()
+		// Should contain unset for both vars
+		if !strings.Contains(result, "unset VAR1;") {
+			t.Errorf("Expected unset VAR1, got: %s", result)
+		}
+		if !strings.Contains(result, "unset VAR2;") {
+			t.Errorf("Expected unset VAR2, got: %s", result)
+		}
+		// Should not contain any exports
+		if strings.Contains(result, "export") {
+			t.Errorf("Expected no exports, got: %s", result)
+		}
+	})
+
+	t.Run("fish shell unset syntax", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "camp.yaml")
+
+		// First activation
+		yamlContent := `env:
+  OLD_VAR: "old"
+  KEEP_VAR: "keep"
+`
+		if err := os.WriteFile(configPath, []byte(yamlContent), 0644); err != nil {
+			t.Fatalf("Failed to write test config: %v", err)
+		}
+
+		original, _ := os.Getwd()
+		os.Chdir(tmpDir)
+		defer os.Chdir(original)
+
+		// First run with fish
+		var output1 bytes.Buffer
+		cmd1 := activateCmd()
+		cmd1.SetOut(&output1)
+		cmd1.SetArgs([]string{"--shell", "fish"})
+		if err := cmd1.Execute(); err != nil {
+			t.Fatalf("First command failed: %v", err)
+		}
+
+		// Update config - remove OLD_VAR
+		yamlContent2 := `env:
+  KEEP_VAR: "keep"
+`
+		if err := os.WriteFile(configPath, []byte(yamlContent2), 0644); err != nil {
+			t.Fatalf("Failed to write updated config: %v", err)
+		}
+
+		// Second run with fish
+		var output2 bytes.Buffer
+		cmd2 := activateCmd()
+		cmd2.SetOut(&output2)
+		cmd2.SetArgs([]string{"--shell", "fish"})
+		if err := cmd2.Execute(); err != nil {
+			t.Fatalf("Second command failed: %v", err)
+		}
+
+		result := output2.String()
+		// Should use fish unset syntax
+		if !strings.Contains(result, "set -e OLD_VAR;") {
+			t.Errorf("Expected fish unset syntax, got: %s", result)
 		}
 	})
 }
