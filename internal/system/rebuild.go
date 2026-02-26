@@ -122,6 +122,21 @@ func CompileTemplates(user *User) error {
 	return nil
 }
 
+var darwinEtcFiles = []string{
+	"/etc/bashrc",
+	"/etc/zshrc",
+	"/etc/zprofile",
+}
+
+func backupDarwinEtcFiles() error {
+	for _, f := range darwinEtcFiles {
+		if err := utils.BackupFile(f); err != nil {
+			return fmt.Errorf("failed to back up %s: %w", f, err)
+		}
+	}
+	return nil
+}
+
 // ExecuteRebuild runs the platform-specific rebuild command
 func ExecuteRebuild(user *User) error {
 	nixDir := filepath.Join(user.HomeDir, ".camp", "nix")
@@ -136,8 +151,10 @@ func ExecuteRebuild(user *User) error {
 
 	switch user.Platform {
 	case "darwin":
-		// macOS: use nix-darwin
-		// Note: nix-darwin may require sudo for system activation
+		if err := backupDarwinEtcFiles(); err != nil {
+			return fmt.Errorf("failed to back up /etc files: %w", err)
+		}
+
 		cmd = "sudo"
 		args = []string{
 			"nix",

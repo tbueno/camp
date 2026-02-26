@@ -279,6 +279,25 @@ func TestExecuteRebuild_NoNixDirectory(t *testing.T) {
 	}
 }
 
+func TestBackupDarwinEtcFiles(t *testing.T) {
+	// Verify the list of files to back up
+	expected := []string{
+		"/etc/bashrc",
+		"/etc/zshrc",
+		"/etc/zprofile",
+	}
+
+	if len(darwinEtcFiles) != len(expected) {
+		t.Fatalf("Expected %d files, got %d", len(expected), len(darwinEtcFiles))
+	}
+
+	for i, f := range expected {
+		if darwinEtcFiles[i] != f {
+			t.Errorf("Expected darwinEtcFiles[%d] = %q, got %q", i, f, darwinEtcFiles[i])
+		}
+	}
+}
+
 func TestCopyDir(t *testing.T) {
 	// Create temporary directories
 	tmpSrc := t.TempDir()

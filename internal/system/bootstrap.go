@@ -201,6 +201,7 @@ func bootstrapMac(campPath string, templDir utils.TemplDir, user *User, output i
 
 		utils.BackupFile("/etc/bashrc")
 		utils.BackupFile("/etc/zshrc")
+		utils.BackupFile("/etc/zprofile")
 		utils.BackupFile("/etc/nix/nix.conf")
 
 		// Create .envrc file
