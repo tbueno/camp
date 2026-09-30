@@ -11,27 +11,29 @@ import (
 
 // TemplateData holds the data to be injected into templates
 type TemplateData struct {
-	Name         string            // Username
-	HostName     string            // Machine hostname
-	Platform     string            // OS (darwin/linux)
-	Architecture string            // CPU arch (amd64/arm64)
-	HomeDir      string            // User's home directory
-	EnvVars      map[string]string // Custom environment variables
-	Packages     []string          // Nix packages to install
-	Flakes       []Flake           // External Nix flakes to integrate
+	Name             string            // Username
+	HostName         string            // Machine hostname
+	Platform         string            // OS (darwin/linux)
+	Architecture     string            // CPU arch (amd64/arm64)
+	HomeDir          string            // User's home directory
+	EnvVars          map[string]string // Custom environment variables
+	Packages         []string          // Nix packages to install
+	UnstablePackages []string          // Nix packages to install from nixpkgs-unstable
+	Flakes           []Flake           // External Nix flakes to integrate
 }
 
 // NewTemplateData creates template data from a User
 func NewTemplateData(user *User) *TemplateData {
 	return &TemplateData{
-		Name:         user.Name,
-		HostName:     user.HostName,
-		Platform:     user.Platform,
-		Architecture: user.Architecture,
-		HomeDir:      user.HomeDir,
-		EnvVars:      user.EnvVars,
-		Packages:     user.Packages,
-		Flakes:       user.Flakes,
+		Name:             user.Name,
+		HostName:         user.HostName,
+		Platform:         user.Platform,
+		Architecture:     user.Architecture,
+		HomeDir:          user.HomeDir,
+		EnvVars:          user.EnvVars,
+		Packages:         user.Packages,
+		UnstablePackages: user.UnstablePackages,
+		Flakes:           user.Flakes,
 	}
 }
 

@@ -11,17 +11,19 @@ import (
 
 // CampConfig represents the camp.yml configuration file
 type CampConfig struct {
-	Env      map[string]string `yaml:"env"`      // Environment variables
-	Packages []string          `yaml:"packages"` // Nix packages to install
-	Flakes   []Flake           `yaml:"flakes"`   // External Nix flakes to integrate
+	Env              map[string]string `yaml:"env"`               // Environment variables
+	Packages         []string          `yaml:"packages"`          // Nix packages to install from the stable channel
+	UnstablePackages []string          `yaml:"unstable-packages"` // Nix packages to install from nixpkgs-unstable
+	Flakes           []Flake           `yaml:"flakes"`            // External Nix flakes to integrate
 }
 
 // DefaultConfig returns a CampConfig with sensible defaults
 func DefaultConfig() *CampConfig {
 	return &CampConfig{
-		Env:      make(map[string]string),
-		Packages: []string{},
-		Flakes:   []Flake{},
+		Env:              make(map[string]string),
+		Packages:         []string{},
+		UnstablePackages: []string{},
+		Flakes:           []Flake{},
 	}
 }
 
@@ -54,6 +56,11 @@ func LoadConfig(path string) (*CampConfig, error) {
 	// Initialize Packages slice if nil
 	if config.Packages == nil {
 		config.Packages = []string{}
+	}
+
+	// Initialize UnstablePackages slice if nil
+	if config.UnstablePackages == nil {
+		config.UnstablePackages = []string{}
 	}
 
 	// Initialize Flakes slice if nil
@@ -237,26 +244,32 @@ func validateArgType(flakeName, argName string, value interface{}) error {
 	}
 }
 
-// ValidatePackages validates the packages configuration
+// ValidatePackages validates the packages configuration. Stable and unstable
+// packages share a namespace, so a name may only appear in one of the two lists.
 func (c *CampConfig) ValidatePackages() error {
-	if c.Packages == nil || len(c.Packages) == 0 {
-		// Empty packages is valid
-		return nil
-	}
-
-	// Track package names to ensure uniqueness
+	// Track package names to ensure uniqueness across both channels
 	seen := make(map[string]bool)
 
-	for i, pkg := range c.Packages {
+	if err := validatePackageList("package", c.Packages, seen); err != nil {
+		return err
+	}
+
+	return validatePackageList("unstable package", c.UnstablePackages, seen)
+}
+
+// validatePackageList validates a single list of package names, recording each
+// one in seen so that names cannot be repeated across lists
+func validatePackageList(label string, packages []string, seen map[string]bool) error {
+	for i, pkg := range packages {
 		// Validate package name is not empty or whitespace-only
 		if strings.TrimSpace(pkg) == "" {
-			return fmt.Errorf("package at index %d is empty or contains only whitespace", i)
+			return fmt.Errorf("%s at index %d is empty or contains only whitespace", label, i)
 		}
 
 		// Validate package name doesn't contain invalid characters
 		// Nix package names should be alphanumeric with hyphens, underscores, and dots
 		if !isValidNixPackageName(pkg) {
-			return fmt.Errorf("package '%s' has invalid format - must contain only letters, numbers, hyphens, underscores, and dots", pkg)
+			return fmt.Errorf("%s '%s' has invalid format - must contain only letters, numbers, hyphens, underscores, and dots", label, pkg)
 		}
 
 		// Check for duplicates

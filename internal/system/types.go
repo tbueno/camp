@@ -24,15 +24,16 @@ type Home struct {
 
 // User represents user information
 type User struct {
-	Name         string
-	HomeDir      string
-	Platform     string
-	Architecture string
-	Shell        string
-	HostName     string
-	EnvVars      map[string]string // Custom environment variables from camp.yml
-	Packages     []string          // Nix packages to install from camp.yml
-	Flakes       []Flake           // External Nix flakes from camp.yml
+	Name             string
+	HomeDir          string
+	Platform         string
+	Architecture     string
+	Shell            string
+	HostName         string
+	EnvVars          map[string]string // Custom environment variables from camp.yml
+	Packages         []string          // Nix packages to install from camp.yml
+	UnstablePackages []string          // Nix packages to install from nixpkgs-unstable
+	Flakes           []Flake           // External Nix flakes from camp.yml
 }
 
 // getRuntimeArchitecture detects the actual system architecture at runtime
@@ -68,15 +69,16 @@ func NewUser() *User {
 	u, _ := user.Current()
 	shell := os.Getenv("SHELL")
 	user := &User{
-		Name:         u.Username,
-		HomeDir:      u.HomeDir,
-		Platform:     runtime.GOOS,
-		Architecture: getRuntimeArchitecture(),
-		Shell:        shell,
-		HostName:     utils.HostName(),
-		EnvVars:      make(map[string]string),
-		Packages:     []string{},
-		Flakes:       []Flake{},
+		Name:             u.Username,
+		HomeDir:          u.HomeDir,
+		Platform:         runtime.GOOS,
+		Architecture:     getRuntimeArchitecture(),
+		Shell:            shell,
+		HostName:         utils.HostName(),
+		EnvVars:          make(map[string]string),
+		Packages:         []string{},
+		UnstablePackages: []string{},
+		Flakes:           []Flake{},
 	}
 	// Load config and populate EnvVars and Flakes if available
 	user.Reload()
@@ -104,6 +106,13 @@ func (u *User) Reload() error {
 		u.Packages = config.Packages
 	} else {
 		u.Packages = []string{}
+	}
+
+	// Update UnstablePackages from config
+	if config.UnstablePackages != nil {
+		u.UnstablePackages = config.UnstablePackages
+	} else {
+		u.UnstablePackages = []string{}
 	}
 
 	// Update Flakes from config

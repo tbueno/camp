@@ -2,14 +2,14 @@
   description = "Camp Development Environment";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-24.11-darwin";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-25.11-darwin";
     nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     nix-darwin = {
-      url = "github:LnL7/nix-darwin/nix-darwin-24.11";
+      url = "github:nix-darwin/nix-darwin/nix-darwin-25.11";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     home-manager = {
-      url = "github:nix-community/home-manager/release-24.11";
+      url = "github:nix-community/home-manager/release-25.11";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -44,9 +44,12 @@
         then "aarch64-linux"
         else "x86_64-linux";
 
+    # Packages pulled from nixpkgs-unstable instead of the pinned release
+    pkgsUnstable = import nixpkgs-unstable { inherit system; };
+
     # Define variables that will be injected in other templates
     specialArgs = {
-      inherit hostName user usersPath;
+      inherit hostName user usersPath pkgsUnstable;
       customEnvVars = {
         {{- range $key, $value := .EnvVars }}
         "{{ $key }}" = "{{ $value }}";
@@ -54,6 +57,11 @@
       };
       customPackages = [
         {{- range .Packages }}
+        "{{ . }}"
+        {{- end }}
+      ];
+      customUnstablePackages = [
+        {{- range .UnstablePackages }}
         "{{ . }}"
         {{- end }}
       ];

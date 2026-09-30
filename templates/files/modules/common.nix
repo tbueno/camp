@@ -1,4 +1,4 @@
-{ config, lib, pkgs, user, usersPath, customEnvVars, customPackages, ... }:
+{ config, lib, pkgs, pkgsUnstable, user, usersPath, customEnvVars, customPackages, customUnstablePackages, ... }:
 
 {
   programs.home-manager.enable = true;
@@ -16,7 +16,9 @@
       devbox
       direnv
       git  # Add git from Nix to ensure it's available
-    ] ++ (map (name: pkgs.${name}) customPackages);
+    ]
+    ++ (map (name: pkgs.${name}) customPackages)
+    ++ (map (name: pkgsUnstable.${name}) customUnstablePackages);
     stateVersion = "24.05";
     username = user;
 
@@ -27,10 +29,10 @@
   # Enable zsh management with dotDir approach
   programs.zsh = {
     enable = true;
-    dotDir = ".camp";  # Relative path from home directory
+    dotDir = "${config.home.homeDirectory}/.camp";
 
     # Source user's original .zshrc after camp's config loads
-    initExtra = ''
+    initContent = ''
       [ -f ~/.zshrc ] && source ~/.zshrc
     '';
   };

@@ -5,6 +5,7 @@
   users.users.${user} = {
     home = usersPath;
   };
+  system.primaryUser = user;
   nix.enable = false;
   nix.settings.experimental-features = "nix-command flakes";
   nix.nixPath = [];  # Disable channel lookups (using flakes instead)
