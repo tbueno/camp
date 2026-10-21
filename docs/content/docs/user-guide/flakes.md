@@ -79,7 +79,10 @@ url: "gitlab:username/repository"
 url: "path:/absolute/path/to/flake"
 ```
 
-Useful for testing flakes during development.
+Useful for testing flakes during development. Local flakes (`path:`, `git+file:`
+or absolute path URLs) are refreshed on every `camp env rebuild`, so your edits
+are applied without running `camp env update`. For `git+file:` URLs, Nix only
+sees committed changes.
 
 ### Generic Git
 
@@ -272,7 +275,9 @@ flakes:
 
 ### Updating Flakes
 
-Update all flake dependencies:
+Changes to `camp.yml` and to local flakes are picked up by `camp env rebuild`
+automatically. Remote flakes (and the built-in nixpkgs, nix-darwin and
+home-manager inputs) stay pinned in `flake.lock` until you update them:
 
 ```bash
 camp env update

@@ -150,6 +150,19 @@ type Flake struct {
 	Outputs []FlakeOutput          `yaml:"outputs"` // Which outputs to import
 }
 
+// localFlakeURLPrefixes lists URL prefixes that identify flakes living on the local filesystem
+var localFlakeURLPrefixes = []string{"path:", "git+file:", "/"}
+
+// IsLocal reports whether the flake is sourced from the local filesystem
+func (f Flake) IsLocal() bool {
+	for _, prefix := range localFlakeURLPrefixes {
+		if strings.HasPrefix(f.URL, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 // EnvVar represents an environment variable
 type EnvVar struct {
 	Name  string

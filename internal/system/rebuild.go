@@ -122,6 +122,51 @@ func CompileTemplates(user *User) error {
 	return nil
 }
 
+// LocalFlakeNames returns the names of the flakes sourced from the local filesystem
+func LocalFlakeNames(flakes []Flake) []string {
+	var names []string
+	for _, flake := range flakes {
+		if flake.IsLocal() {
+			names = append(names, flake.Name)
+		}
+	}
+	return names
+}
+
+// localFlakeUpdateArgs builds the nix arguments to refresh only the local flake inputs.
+// Returns nil when there are no local flakes.
+func localFlakeUpdateArgs(nixDir string, flakes []Flake) []string {
+	names := LocalFlakeNames(flakes)
+	if len(names) == 0 {
+		return nil
+	}
+
+	args := []string{
+		"--extra-experimental-features",
+		"nix-command flakes",
+		"flake",
+		"update",
+	}
+	args = append(args, names...)
+	return append(args, "--flake", nixDir)
+}
+
+// UpdateLocalFlakes refreshes the lock entries of local flakes so their latest
+// contents are used on rebuild. Remote inputs stay pinned.
+func UpdateLocalFlakes(user *User) error {
+	nixDir := filepath.Join(user.HomeDir, ".camp", "nix")
+	args := localFlakeUpdateArgs(nixDir, user.Flakes)
+	if args == nil {
+		return nil
+	}
+
+	if err := utils.RunCommand("nix", args...); err != nil {
+		return fmt.Errorf("failed to update local flakes: %w", err)
+	}
+
+	return nil
+}
+
 var darwinEtcFiles = []string{
 	"/etc/bashrc",
 	"/etc/zshrc",

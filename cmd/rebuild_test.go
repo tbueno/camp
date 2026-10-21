@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"camp/internal/system"
+
 	"github.com/spf13/cobra"
 )
 
@@ -183,5 +185,30 @@ func TestRebuildCommandOutputFormat(t *testing.T) {
 		if !strings.Contains(outputStr, phrase) {
 			t.Errorf("Expected output to contain '%s', got:\n%s", phrase, outputStr)
 		}
+	}
+}
+
+func TestRebuildCommandMentionsLocalFlakes(t *testing.T) {
+	if !strings.Contains(rebuildCmd.Long, "local flakes") {
+		t.Error("Expected long description to mention local flakes refresh")
+	}
+}
+
+func TestRefreshLocalFlakes_NoLocalFlakes(t *testing.T) {
+	user := &system.User{
+		Name:    "testuser",
+		HomeDir: t.TempDir(),
+		Flakes: []system.Flake{
+			{Name: "remote", URL: "github:user/repo"},
+		},
+	}
+
+	var output bytes.Buffer
+	if err := refreshLocalFlakes(&output, user); err != nil {
+		t.Fatalf("refreshLocalFlakes() returned error: %v", err)
+	}
+
+	if output.Len() != 0 {
+		t.Errorf("Expected no output without local flakes, got:\n%s", output.String())
 	}
 }

@@ -29,7 +29,12 @@ The rebuild process:
    - Adds your package list
    - Integrates configured flakes
 
-3. **Executes platform-specific rebuild**:
+3. **Refreshes local flakes**:
+   - Runs `nix flake update` for flakes with `path:`, `git+file:` or absolute path URLs
+   - Remote flakes and built-in inputs stay pinned until `camp env update`
+   - Skipped when no local flakes are configured
+
+4. **Executes platform-specific rebuild**:
    - **macOS**: Runs `nix-darwin` to rebuild system configuration
    - **Linux**: Runs `home-manager` to rebuild user environment
 
@@ -60,6 +65,8 @@ Copy static Nix files
      ↓
 Render flake.nix template
      ↓
+Refresh local flakes in flake.lock
+     ↓
 Execute rebuild (nix-darwin or home-manager)
      ↓
 Environment updated!
@@ -84,7 +91,11 @@ Run `camp env rebuild` when you:
 - Add or remove packages
 - Change environment variables
 - Add or configure flakes
+- Change a local flake (e.g. `path:/Users/me/dotfiles/flake`)
 - Want to apply configuration updates
+
+You only need `camp env update` before rebuilding to pull new versions of
+remote flakes or the built-in nixpkgs, nix-darwin and home-manager inputs.
 
 ## Example
 
