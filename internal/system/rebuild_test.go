@@ -3,6 +3,7 @@ package system
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -447,5 +448,84 @@ flakes:
 
 	if !strings.Contains(contentStr, "testhost") {
 		t.Error("Generated flake.nix should contain hostname")
+	}
+}
+
+func TestLocalFlakeNames(t *testing.T) {
+	flakes := []Flake{
+		{Name: "dotfiles", URL: "path:/Users/me/dotfiles"},
+		{Name: "remote", URL: "github:user/repo"},
+		{Name: "work", URL: "/Users/me/work"},
+	}
+
+	got := LocalFlakeNames(flakes)
+	want := []string{"dotfiles", "work"}
+
+	if !slices.Equal(got, want) {
+		t.Errorf("LocalFlakeNames() = %v, want %v", got, want)
+	}
+}
+
+func TestLocalFlakeNames_NoLocalFlakes(t *testing.T) {
+	flakes := []Flake{
+		{Name: "remote", URL: "github:user/repo"},
+	}
+
+	if got := LocalFlakeNames(flakes); len(got) != 0 {
+		t.Errorf("LocalFlakeNames() = %v, want empty", got)
+	}
+}
+
+func TestLocalFlakeUpdateArgs_OnlyLocalFlakes(t *testing.T) {
+	flakes := []Flake{
+		{Name: "dotfiles", URL: "path:/Users/me/dotfiles"},
+		{Name: "remote", URL: "github:user/repo"},
+		{Name: "work", URL: "git+file:///Users/me/work"},
+	}
+
+	got := localFlakeUpdateArgs("/home/me/.camp/nix", flakes)
+	want := []string{
+		"--extra-experimental-features",
+		"nix-command flakes",
+		"flake",
+		"update",
+		"dotfiles",
+		"work",
+		"--flake",
+		"/home/me/.camp/nix",
+	}
+
+	if !slices.Equal(got, want) {
+		t.Errorf("localFlakeUpdateArgs() = %v, want %v", got, want)
+	}
+}
+
+func TestLocalFlakeUpdateArgs_NoLocalFlakes(t *testing.T) {
+	flakes := []Flake{
+		{Name: "remote", URL: "github:user/repo"},
+	}
+
+	if got := localFlakeUpdateArgs("/home/me/.camp/nix", flakes); got != nil {
+		t.Errorf("localFlakeUpdateArgs() = %v, want nil", got)
+	}
+}
+
+func TestLocalFlakeUpdateArgs_NoFlakes(t *testing.T) {
+	if got := localFlakeUpdateArgs("/home/me/.camp/nix", nil); got != nil {
+		t.Errorf("localFlakeUpdateArgs() = %v, want nil", got)
+	}
+}
+
+func TestUpdateLocalFlakes_NoLocalFlakesIsNoop(t *testing.T) {
+	user := &User{
+		Name:    "testuser",
+		HomeDir: t.TempDir(),
+		Flakes: []Flake{
+			{Name: "remote", URL: "github:user/repo"},
+		},
+	}
+
+	if err := UpdateLocalFlakes(user); err != nil {
+		t.Errorf("UpdateLocalFlakes() should be a no-op without local flakes, got: %v", err)
 	}
 }

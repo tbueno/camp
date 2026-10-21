@@ -21,6 +21,10 @@ This command:
   3. This includes both built-in flakes (nixpkgs, nix-darwin, home-manager)
      and any custom flakes defined in your camp.yml
 
+Changes to camp.yml and to local flakes (path:, git+file: or absolute path
+URLs) are picked up by 'camp env rebuild' automatically. This command is only
+needed to pull new versions of remote inputs.
+
 After running this command, you'll need to run 'camp env rebuild' to apply
 the updated dependencies.
 

@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"io"
+	"strings"
 
 	"camp/internal/system"
 
@@ -15,8 +17,11 @@ var rebuildCmd = &cobra.Command{
 
 This command:
   1. Copies Nix configuration files from templates to ~/.camp/nix/
-  2. Renders flake.nix with your custom environment variables from camp.yml
-  3. Executes the platform-specific rebuild command:
+  2. Renders flake.nix with your configuration from camp.yml
+  3. Refreshes local flakes (path:, git+file: or absolute path URLs) so
+     their latest changes are applied. Remote flakes stay pinned until
+     you run 'camp env update'
+  4. Executes the platform-specific rebuild command:
      - macOS: Uses nix-darwin to rebuild system configuration
      - Linux: Uses home-manager to rebuild user environment
 
@@ -50,6 +55,10 @@ func runRebuild(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "✓ Environment prepared successfully\n\n")
 
+	if err := refreshLocalFlakes(cmd.OutOrStdout(), user); err != nil {
+		return err
+	}
+
 	// Execute rebuild
 	fmt.Fprintf(cmd.OutOrStdout(), "Executing rebuild command...\n")
 	if err := system.ExecuteRebuild(user); err != nil {
@@ -57,5 +66,21 @@ func runRebuild(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "\n✓ Environment rebuild completed successfully!\n")
+	return nil
+}
+
+// refreshLocalFlakes updates the lock entries of local flakes, skipping silently when there are none
+func refreshLocalFlakes(out io.Writer, user *system.User) error {
+	names := system.LocalFlakeNames(user.Flakes)
+	if len(names) == 0 {
+		return nil
+	}
+
+	fmt.Fprintf(out, "Refreshing local flakes: %s\n", strings.Join(names, ", "))
+	if err := system.UpdateLocalFlakes(user); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "✓ Local flakes refreshed\n\n")
+
 	return nil
 }

@@ -195,3 +195,9 @@ func TestUpdateCommandOutputFormat(t *testing.T) {
 		}
 	}
 }
+
+func TestUpdateCommandMentionsAutomaticLocalRefresh(t *testing.T) {
+	if !strings.Contains(updateCmd.Long, "local flakes") {
+		t.Error("Expected long description to explain local flakes are refreshed on rebuild")
+	}
+}

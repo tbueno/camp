@@ -343,6 +343,9 @@ PrepareEnvironment()
     ├─ Render flake.nix with user data
     └─ Save to ~/.camp/nix/flake.nix
     ↓
+UpdateLocalFlakes()
+    └─ nix flake update <local-flake-names> --flake ~/.camp/nix (skipped if none)
+    ↓
 ExecuteRebuild()
     ├─ macOS: nix run nix-darwin#darwin-rebuild switch --flake ~/.camp/nix#<hostname>
     └─ Linux: home-manager switch --impure -b backup --flake ~/.camp/nix#<username>
@@ -366,6 +369,11 @@ ExecuteRebuild()
 - Reloads user configuration from camp.yml
 - Renders flake.nix template with current user data
 - Writes output to `~/.camp/nix/flake.nix`
+
+**UpdateLocalFlakes(user *User)**
+- Refreshes `flake.lock` entries of local flakes (`Flake.IsLocal()`: `path:`, `git+file:` or `/` URLs)
+- Remote inputs stay pinned until `camp env update`
+- No-op when there are no local flakes
 
 **ExecuteRebuild(user *User)**
 - Runs platform-specific rebuild commands
@@ -496,6 +504,8 @@ CompileTemplates() renders flake.nix with:
   - System outputs → nix-darwin modules
   - Home outputs → home-manager modules
          ↓
+UpdateLocalFlakes() refreshes local flakes in flake.lock
+         ↓
 ExecuteRebuild() applies configuration
 ```
 
@@ -505,13 +515,13 @@ ExecuteRebuild() applies configuration
 ```bash
 camp env rebuild
 ```
-Integrates all defined flakes into your environment.
+Integrates all defined flakes into your environment. Local flakes are refreshed automatically.
 
 **Update flake dependencies**:
 ```bash
 camp env update
 ```
-Updates `flake.lock` with latest versions of all flake inputs.
+Updates `flake.lock` with latest versions of all flake inputs. Only needed for remote inputs.
 
 ### Validation Rules
 

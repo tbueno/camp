@@ -1643,3 +1643,27 @@ func containsMiddle(s, substr string) bool {
 	}
 	return false
 }
+
+func TestFlakeIsLocal(t *testing.T) {
+	tests := []struct {
+		url  string
+		want bool
+	}{
+		{"path:/Users/me/dotfiles", true},
+		{"git+file:///Users/me/dotfiles", true},
+		{"/Users/me/dotfiles", true},
+		{"github:user/repo", false},
+		{"git+ssh://git@github.com/company/repo.git", false},
+		{"git+https://git.example.com/repo.git", false},
+		{"gitlab:user/repo", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.url, func(t *testing.T) {
+			flake := Flake{Name: "test", URL: tt.url}
+			if got := flake.IsLocal(); got != tt.want {
+				t.Errorf("IsLocal() for %q = %v, want %v", tt.url, got, tt.want)
+			}
+		})
+	}
+}
