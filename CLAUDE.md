@@ -30,10 +30,11 @@ camp/
 │   │   ├── bootstrap.go  # Bootstrap logic
 │   │   └── envrc.go      # Envrc parsing
 │   └── utils/
-│       ├── command.go    # Command execution utilities
-│       ├── io.go         # File I/O utilities
-│       └── template.go   # Template file utilities
+│       ├── command.go    # Command execution (utils.Exec, replaceable in tests)
+│       ├── io.go         # File I/O and template copy utilities
+│       └── utilstest/    # Test helpers (StubExec)
 ├── templates/
+│   ├── templates.go      # Embeds initial/ and files/ into the binary (templates.FS)
 │   ├── initial/          # Bootstrap templates
 │   └── files/            # Runtime templates for env rebuild
 │       ├── flake.nix     # Main Nix flake template
@@ -255,7 +256,16 @@ Camp uses Go's `text/template` package to generate Nix configuration files dynam
 
 ### Template Structure
 
-Templates are stored in `templates/files/` and include:
+Templates are stored in `templates/files/` (rebuild) and `templates/initial/` (bootstrap).
+`templates/templates.go` embeds both into the binary with `//go:embed` as `templates.FS`, so
+camp works from any directory. Paths inside `templates.FS` drop the `templates/` prefix
+(`files/flake.nix`, `initial/bin/bootstrap`). `templates/flakes/` holds documentation examples
+and is not embedded. Rebuild the binary after editing a template.
+
+Functions that read templates take a `utils.TemplDir` (`ReadFile` + `ReadDir`): commands pass
+`templates.FS`, tests pass `templates.FS` or an in-memory `fstest.MapFS`.
+
+`templates/files/` includes:
 - **flake.nix** - Main Nix flake configuration (uses Go template syntax)
 - **mac.nix** - macOS system configuration
 - **linux.nix** - Linux configuration
@@ -276,7 +286,7 @@ type TemplateData struct {
 ```
 
 **Template Rendering Process:**
-1. Load template file from `templates/files/`
+1. Read `files/flake.nix` from the templates FS
 2. Create `TemplateData` from User
 3. Parse and execute template with data
 4. Write rendered output to `~/.camp/nix/`
@@ -284,16 +294,16 @@ type TemplateData struct {
 ### Template API
 
 - `NewTemplateData(user *User)` - Create template data from User
-- `CompileTemplate(templatePath, data)` - Parse and render a template file
-- `RenderFlakeTemplate(user *User)` - Render flake.nix with user data
+- `CompileTemplate(name, content, data)` - Parse and render template content (no file I/O)
+- `RenderFlakeTemplate(templDir, user)` - Read `files/flake.nix` from templDir, render it and
+  write `~/.camp/nix/flake.nix`
 
 ### File Utilities
 
-File copying utilities in `internal/utils/template.go`:
-- `CopyFile(src, dest)` - Copy a single file
-- `CopyDir(src, dest)` - Recursively copy directory
-- `CopyTemplateFiles(srcDir, destDir)` - Copy all template files
-- `EnsureDir(path)` - Create directory if it doesn't exist
+Template copying utilities in `internal/utils/io.go`:
+- `CopyTemplDir(templDir, src, dst)` - Recursively copy a directory from a templates FS to disk
+- `CopyConfFile(templDir, src, dst)` - Copy a single file from a templates FS to disk
+- `CopyFile(src, dst)` - Copy a single file on disk
 
 ### Template Syntax
 
@@ -316,7 +326,8 @@ customEnvVars = {
 ### Testing Templates
 
 When writing template tests:
-- Create temporary template files in test directories
+- Pass template text straight to `CompileTemplate`; use `fstest.MapFS` or `templates.FS`
+  for functions that read from a templates FS
 - Use `t.TempDir()` for test output directories
 - Verify rendered output contains expected values
 - Test both with and without environment variables
@@ -353,19 +364,18 @@ ExecuteRebuild()
 
 ### Rebuild Functions
 
-**PrepareEnvironment(user *User)**
+**PrepareEnvironment(templDir, user)**
 - Orchestrates the entire preparation process
 - Creates necessary directories
 - Calls CopyConfigFiles() and CompileTemplates()
 - Returns error if any step fails
 
-**CopyConfigFiles(user *User)**
-- Copies .nix files from `templates/files/` to `~/.camp/nix/`
+**CopyConfigFiles(templDir, user)**
+- Copies `files/` from the templates FS to `~/.camp/nix/`
 - Excludes `flake.nix` (rendered separately)
 - Recursively copies directories (e.g., `modules/`)
-- Preserves file permissions
 
-**CompileTemplates(user *User)**
+**CompileTemplates(templDir, user)**
 - Reloads user configuration from camp.yml
 - Renders flake.nix template with current user data
 - Writes output to `~/.camp/nix/flake.nix`
@@ -410,7 +420,12 @@ When writing rebuild tests:
 - Create mock config files in test directories
 - Verify directory and file creation
 - Test platform-specific logic separately
-- Mock external command execution (nix, home-manager)
+- NEVER run real external commands (`sudo`, `nix`, `home-manager`, `/nix/nix-installer`):
+  run them through `utils.Exec` / `utils.RunCommand` and call `utilstest.StubExec(t)` in the
+  test, then assert on the recorded commands (`exec.Called(...)`, `exec.Calls`); set
+  `exec.Err` to simulate failures
+- Command tests in `cmd/` call `stubCurrentUser(t, platform, config)` so the command acts on a
+  temporary home; `system.NewUser()` uses `user.Current()` and ignores `$HOME`
 - Test error conditions (missing directories, unsupported platforms)
 
 ## Flake System

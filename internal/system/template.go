@@ -2,12 +2,17 @@ package system
 
 import (
 	"bytes"
+	"camp/internal/utils"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"text/template"
 )
+
+// flakeTemplatePath is the location of the flake.nix template inside the templates FS
+const flakeTemplatePath = "files/flake.nix"
 
 // TemplateData holds the data to be injected into templates
 type TemplateData struct {
@@ -68,21 +73,15 @@ func renderNixValue(value interface{}) string {
 	}
 }
 
-// CompileTemplate parses and renders a template file with the given data
-func CompileTemplate(templatePath string, data *TemplateData) ([]byte, error) {
-	// Read template file
-	templateContent, err := os.ReadFile(templatePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read template file: %w", err)
-	}
-
+// CompileTemplate parses and renders template content with the given data
+func CompileTemplate(name, content string, data *TemplateData) ([]byte, error) {
 	// Create template with custom functions
 	funcMap := template.FuncMap{
 		"renderNixValue": renderNixValue,
 	}
 
 	// Parse template
-	tmpl, err := template.New(filepath.Base(templatePath)).Funcs(funcMap).Parse(string(templateContent))
+	tmpl, err := template.New(name).Funcs(funcMap).Parse(content)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse template: %w", err)
 	}
@@ -96,9 +95,9 @@ func CompileTemplate(templatePath string, data *TemplateData) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// RenderFlakeTemplate renders the flake.nix template with user data
+// RenderFlakeTemplate renders the files/flake.nix template from templDir with user data
 // and saves it to ~/.camp/nix/flake.nix
-func RenderFlakeTemplate(user *User) error {
+func RenderFlakeTemplate(templDir utils.TemplDir, user *User) error {
 	// Reload user config to get latest env vars
 	if err := user.Reload(); err != nil {
 		return fmt.Errorf("failed to reload user config: %w", err)
@@ -107,11 +106,12 @@ func RenderFlakeTemplate(user *User) error {
 	// Create template data
 	data := NewTemplateData(user)
 
-	// Template path (from templates/files/)
-	templatePath := "templates/files/flake.nix"
+	templateContent, err := templDir.ReadFile(flakeTemplatePath)
+	if err != nil {
+		return fmt.Errorf("failed to read template file: %w", err)
+	}
 
-	// Compile template
-	rendered, err := CompileTemplate(templatePath, data)
+	rendered, err := CompileTemplate(path.Base(flakeTemplatePath), string(templateContent), data)
 	if err != nil {
 		return fmt.Errorf("failed to compile flake template: %w", err)
 	}

@@ -1,13 +1,13 @@
 package cmd
 
 import (
-	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/spf13/cobra"
+	"camp/internal/utils/utilstest"
 )
 
 func TestUpdateCommand(t *testing.T) {
@@ -53,23 +53,8 @@ func TestUpdateCommand(t *testing.T) {
 }
 
 func TestUpdateCommandExecution(t *testing.T) {
-	// Skip if template files don't exist
-	if _, err := os.Stat("templates/files"); os.IsNotExist(err) {
-		t.Skip("Skipping test: templates/files directory not found")
-	}
-
-	t.Run("execution with missing nix tools", func(t *testing.T) {
-		// Create temporary home directory
-		tmpHome := t.TempDir()
-
-		// Create .camp directory and config
-		campDir := filepath.Join(tmpHome, ".camp")
-		if err := os.MkdirAll(campDir, 0755); err != nil {
-			t.Fatalf("Failed to create .camp directory: %v", err)
-		}
-
-		configPath := filepath.Join(campDir, "camp.yml")
-		configContent := `env:
+	exec := utilstest.StubExec(t)
+	user := stubCurrentUser(t, "linux", `env:
   EDITOR: nvim
 
 flakes:
@@ -78,120 +63,64 @@ flakes:
     outputs:
       - name: packages
         type: home
-`
-		if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
-			t.Fatalf("Failed to write config: %v", err)
-		}
+`)
 
-		// Save original HOME and restore after test
-		originalHome := os.Getenv("HOME")
-		defer os.Setenv("HOME", originalHome)
-		os.Setenv("HOME", tmpHome)
+	output, err := executeCommand(updateCmd)
+	if err != nil {
+		t.Fatalf("update returned error: %v", err)
+	}
 
-		// Create command with output buffer
-		var output bytes.Buffer
-		var errOutput bytes.Buffer
+	if !strings.Contains(output, "✓ Environment prepared successfully") {
+		t.Errorf("Expected output to show environment was prepared, got:\n%s", output)
+	}
+	if !strings.Contains(output, "✓ Flake dependencies updated successfully!") {
+		t.Errorf("Expected output to show flakes were updated, got:\n%s", output)
+	}
 
-		cmd := &cobra.Command{
-			Use:   updateCmd.Use,
-			Short: updateCmd.Short,
-			Long:  updateCmd.Long,
-			RunE:  updateCmd.RunE,
-		}
+	nixDir := filepath.Join(user.HomeDir, ".camp", "nix")
+	if _, err := os.Stat(filepath.Join(nixDir, "flake.nix")); err != nil {
+		t.Errorf("Expected flake.nix to be created: %v", err)
+	}
 
-		cmd.SetOut(&output)
-		cmd.SetErr(&errOutput)
-		cmd.SetArgs([]string{})
+	if len(exec.Calls) != 1 || !exec.Called("nix", "flake", "update", "--flake", nixDir) {
+		t.Errorf("Expected a single nix flake update for %s, got:\n%s", nixDir, exec)
+	}
+}
 
-		// Execute command - will likely fail due to missing nix tools
-		err := cmd.Execute()
+func TestUpdateCommandExecution_UpdateFails(t *testing.T) {
+	exec := utilstest.StubExec(t)
+	exec.Err = errors.New("exit status 1")
+	stubCurrentUser(t, "linux", "env:\n  EDITOR: nvim\n")
 
-		// Verify that preparation succeeded
-		outputStr := output.String()
-		if !strings.Contains(outputStr, "Preparing environment") {
-			t.Error("Expected output to contain 'Preparing environment'")
-		}
-
-		if !strings.Contains(outputStr, "✓ Environment prepared successfully") {
-			t.Error("Expected output to show environment was prepared")
-		}
-
-		// The update will likely fail unless nix is actually installed
-		// That's expected in test environment
-		if err != nil {
-			t.Logf("Update failed as expected (nix tools not installed): %v", err)
-		}
-
-		// Verify files were created during preparation
-		nixDir := filepath.Join(tmpHome, ".camp", "nix")
-		if _, err := os.Stat(nixDir); os.IsNotExist(err) {
-			t.Error("Expected .camp/nix directory to be created")
-		}
-
-		flakePath := filepath.Join(nixDir, "flake.nix")
-		if _, err := os.Stat(flakePath); os.IsNotExist(err) {
-			t.Error("Expected flake.nix to be created")
-		}
-	})
+	output, err := executeCommand(updateCmd)
+	if err == nil || !strings.Contains(err.Error(), "nix flake update failed") {
+		t.Errorf("Expected nix flake update failure error, got: %v", err)
+	}
+	if strings.Contains(output, "updated successfully") {
+		t.Errorf("Expected no success message on failure, got:\n%s", output)
+	}
 }
 
 func TestUpdateCommandOutputFormat(t *testing.T) {
-	// Skip if template files don't exist
-	if _, err := os.Stat("templates/files"); os.IsNotExist(err) {
-		t.Skip("Skipping test: templates/files directory not found")
+	utilstest.StubExec(t)
+	user := stubCurrentUser(t, "linux", "env:\n  EDITOR: nvim\n")
+
+	output, err := executeCommand(updateCmd)
+	if err != nil {
+		t.Fatalf("update returned error: %v", err)
 	}
-
-	// Create temporary home directory
-	tmpHome := t.TempDir()
-
-	// Create .camp directory and config
-	campDir := filepath.Join(tmpHome, ".camp")
-	if err := os.MkdirAll(campDir, 0755); err != nil {
-		t.Fatalf("Failed to create .camp directory: %v", err)
-	}
-
-	configPath := filepath.Join(campDir, "camp.yml")
-	configContent := `env:
-  EDITOR: nvim
-`
-	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
-		t.Fatalf("Failed to write config: %v", err)
-	}
-
-	// Save original HOME and restore after test
-	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-	os.Setenv("HOME", tmpHome)
-
-	// Create command with output buffer
-	var output bytes.Buffer
-
-	cmd := &cobra.Command{
-		Use:   updateCmd.Use,
-		Short: updateCmd.Short,
-		Long:  updateCmd.Long,
-		RunE:  updateCmd.RunE,
-	}
-
-	cmd.SetOut(&output)
-	cmd.SetArgs([]string{})
-
-	// Execute command
-	_ = cmd.Execute() // Ignore error as update will likely fail
-
-	// Verify output format
-	outputStr := output.String()
 
 	expectedPhrases := []string{
 		"Starting flake update",
-		"User:",
-		"Nix directory:",
+		"User: testuser",
+		"Nix directory: " + user.HomeDir + "/.camp/nix",
 		"Preparing environment",
+		"Updating flake dependencies",
 	}
 
 	for _, phrase := range expectedPhrases {
-		if !strings.Contains(outputStr, phrase) {
-			t.Errorf("Expected output to contain '%s', got:\n%s", phrase, outputStr)
+		if !strings.Contains(output, phrase) {
+			t.Errorf("Expected output to contain '%s', got:\n%s", phrase, output)
 		}
 	}
 }

@@ -20,7 +20,7 @@ The rebuild process:
 
 1. **Prepares the environment**:
    - Creates `~/.camp/nix/` directory if needed
-   - Copies Nix configuration files from templates
+   - Copies the Nix configuration files built into the camp binary
    - Reloads your `camp.yml` configuration
 
 2. **Compiles templates**:

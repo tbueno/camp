@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"camp/internal/system"
+	"camp/templates"
 
 	"github.com/spf13/cobra"
 )
@@ -40,7 +41,7 @@ func init() {
 
 func runRebuild(cmd *cobra.Command, args []string) error {
 	// Get current user context
-	user := system.NewUser()
+	user := currentUser()
 
 	// Output rebuild start message
 	fmt.Fprintf(cmd.OutOrStdout(), "Starting environment rebuild...\n")
@@ -50,7 +51,7 @@ func runRebuild(cmd *cobra.Command, args []string) error {
 
 	// Prepare environment (copy files and render templates)
 	fmt.Fprintf(cmd.OutOrStdout(), "Preparing environment...\n")
-	if err := system.PrepareEnvironment(user); err != nil {
+	if err := system.PrepareEnvironment(templates.FS, user); err != nil {
 		return fmt.Errorf("failed to prepare environment: %w", err)
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "✓ Environment prepared successfully\n\n")

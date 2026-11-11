@@ -1,19 +1,19 @@
 package system
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"testing/fstest"
+
+	"camp/internal/utils/utilstest"
+	"camp/templates"
 )
 
 func TestPrepareEnvironment(t *testing.T) {
-	// Skip if template files don't exist
-	if _, err := os.Stat("templates/files"); os.IsNotExist(err) {
-		t.Skip("Skipping test: templates/files directory not found")
-	}
-
 	// Create temporary home directory
 	tmpHome := t.TempDir()
 
@@ -42,7 +42,7 @@ func TestPrepareEnvironment(t *testing.T) {
 	}
 
 	// Run PrepareEnvironment
-	if err := PrepareEnvironment(user); err != nil {
+	if err := PrepareEnvironment(templates.FS, user); err != nil {
 		t.Fatalf("PrepareEnvironment() failed: %v", err)
 	}
 
@@ -72,11 +72,6 @@ func TestPrepareEnvironment(t *testing.T) {
 }
 
 func TestCopyConfigFiles(t *testing.T) {
-	// Skip if template files don't exist
-	if _, err := os.Stat("templates/files"); os.IsNotExist(err) {
-		t.Skip("Skipping test: templates/files directory not found")
-	}
-
 	// Create temporary home directory
 	tmpHome := t.TempDir()
 
@@ -87,7 +82,7 @@ func TestCopyConfigFiles(t *testing.T) {
 	}
 
 	// Run CopyConfigFiles
-	if err := CopyConfigFiles(user); err != nil {
+	if err := CopyConfigFiles(templates.FS, user); err != nil {
 		t.Fatalf("CopyConfigFiles() failed: %v", err)
 	}
 
@@ -119,11 +114,6 @@ func TestCopyConfigFiles(t *testing.T) {
 }
 
 func TestCompileTemplates(t *testing.T) {
-	// Skip if template files don't exist
-	if _, err := os.Stat("templates/files/flake.nix"); os.IsNotExist(err) {
-		t.Skip("Skipping test: flake.nix template not found")
-	}
-
 	// Create temporary home directory
 	tmpHome := t.TempDir()
 
@@ -153,7 +143,7 @@ func TestCompileTemplates(t *testing.T) {
 	}
 
 	// Run CompileTemplates
-	if err := CompileTemplates(user); err != nil {
+	if err := CompileTemplates(templates.FS, user); err != nil {
 		t.Fatalf("CompileTemplates() failed: %v", err)
 	}
 
@@ -187,18 +177,26 @@ func TestExecuteRebuild_Darwin(t *testing.T) {
 		HomeDir:  tmpHome,
 	}
 
-	// We can't actually run the rebuild command in tests
-	// Instead, we'll verify the function constructs the right parameters
-	// by checking that it would fail with "command not found" or similar
-	// (unless nix is actually installed)
-	err := ExecuteRebuild(user)
+	exec := utilstest.StubExec(t)
 
-	// The command will likely fail unless nix-darwin is installed
-	// We're just testing that the function doesn't panic and
-	// constructs a valid command
-	if err != nil {
-		// Expected - nix-darwin likely not installed in test environment
-		t.Logf("ExecuteRebuild() failed as expected (nix-darwin not installed): %v", err)
+	if err := ExecuteRebuild(user); err != nil {
+		t.Fatalf("ExecuteRebuild() failed: %v", err)
+	}
+
+	last := exec.Calls[len(exec.Calls)-1]
+	want := []string{
+		"sudo", "nix", "--extra-experimental-features", "nix-command flakes",
+		"run", "nix-darwin#darwin-rebuild", "--", "switch", "--impure",
+		"--flake", nixDir + "#testhost",
+	}
+	if !slices.Equal(last, want) {
+		t.Errorf("ExecuteRebuild() ran %v, want %v", last, want)
+	}
+
+	for _, call := range exec.Calls[:len(exec.Calls)-1] {
+		if !slices.Contains(darwinEtcFiles, call[2]) || call[1] != "mv" {
+			t.Errorf("Expected only /etc backups before the rebuild, got %v", call)
+		}
 	}
 }
 
@@ -220,13 +218,34 @@ func TestExecuteRebuild_Linux(t *testing.T) {
 		HomeDir:  tmpHome,
 	}
 
-	// We can't actually run the rebuild command in tests
-	err := ExecuteRebuild(user)
+	exec := utilstest.StubExec(t)
 
-	// The command will likely fail unless home-manager is installed
-	if err != nil {
-		// Expected - home-manager likely not installed in test environment
-		t.Logf("ExecuteRebuild() failed as expected (home-manager not installed): %v", err)
+	if err := ExecuteRebuild(user); err != nil {
+		t.Fatalf("ExecuteRebuild() failed: %v", err)
+	}
+
+	want := [][]string{{
+		"home-manager", "switch", "--impure", "-b", "backup",
+		"--flake", nixDir + "#testuser",
+	}}
+	if !slices.EqualFunc(exec.Calls, want, slices.Equal) {
+		t.Errorf("ExecuteRebuild() ran %v, want %v", exec.Calls, want)
+	}
+}
+
+func TestExecuteRebuild_CommandFails(t *testing.T) {
+	tmpHome := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(tmpHome, ".camp", "nix"), 0755); err != nil {
+		t.Fatalf("Failed to create nix directory: %v", err)
+	}
+	user := &User{Name: "testuser", Platform: "linux", HomeDir: tmpHome}
+
+	exec := utilstest.StubExec(t)
+	exec.Err = errors.New("exit status 1")
+
+	err := ExecuteRebuild(user)
+	if err == nil || !strings.Contains(err.Error(), "rebuild command failed") {
+		t.Errorf("Expected rebuild command failure, got: %v", err)
 	}
 }
 
@@ -299,62 +318,53 @@ func TestBackupDarwinEtcFiles(t *testing.T) {
 	}
 }
 
-func TestCopyDir(t *testing.T) {
-	// Create temporary directories
-	tmpSrc := t.TempDir()
-	tmpDest := t.TempDir()
-
-	// Create source structure
-	if err := os.MkdirAll(filepath.Join(tmpSrc, "subdir"), 0755); err != nil {
-		t.Fatalf("Failed to create source structure: %v", err)
+func TestCopyConfigFiles_NestedDirectories(t *testing.T) {
+	tmpHome := t.TempDir()
+	user := &User{Name: "testuser", HomeDir: tmpHome}
+	templDir := fstest.MapFS{
+		"files/flake.nix":              {Data: []byte("rendered separately")},
+		"files/mac.nix":                {Data: []byte("mac")},
+		"files/modules/common.nix":     {Data: []byte("common")},
+		"files/modules/extra/deep.nix": {Data: []byte("deep")},
 	}
 
-	// Create files
-	file1 := filepath.Join(tmpSrc, "file1.txt")
-	file2 := filepath.Join(tmpSrc, "subdir", "file2.txt")
-
-	if err := os.WriteFile(file1, []byte("content1"), 0644); err != nil {
-		t.Fatalf("Failed to write file1: %v", err)
-	}
-	if err := os.WriteFile(file2, []byte("content2"), 0644); err != nil {
-		t.Fatalf("Failed to write file2: %v", err)
+	if err := CopyConfigFiles(templDir, user); err != nil {
+		t.Fatalf("CopyConfigFiles() failed: %v", err)
 	}
 
-	// Copy directory
-	destPath := filepath.Join(tmpDest, "copied")
-	if err := copyDir(tmpSrc, destPath); err != nil {
-		t.Fatalf("copyDir() failed: %v", err)
+	nixDir := filepath.Join(tmpHome, ".camp", "nix")
+	expected := map[string]string{
+		"mac.nix":                "mac",
+		"modules/common.nix":     "common",
+		"modules/extra/deep.nix": "deep",
+	}
+	for name, want := range expected {
+		got, err := os.ReadFile(filepath.Join(nixDir, name))
+		if err != nil {
+			t.Errorf("CopyConfigFiles() should copy %s: %v", name, err)
+			continue
+		}
+		if string(got) != want {
+			t.Errorf("%s content = %q, want %q", name, got, want)
+		}
 	}
 
-	// Verify files were copied
-	copiedFile1 := filepath.Join(destPath, "file1.txt")
-	copiedFile2 := filepath.Join(destPath, "subdir", "file2.txt")
+	if _, err := os.Stat(filepath.Join(nixDir, "flake.nix")); err == nil {
+		t.Error("CopyConfigFiles() should not copy flake.nix")
+	}
+}
 
-	if _, err := os.Stat(copiedFile1); os.IsNotExist(err) {
-		t.Error("copyDir() should copy file1.txt")
-	}
-	if _, err := os.Stat(copiedFile2); os.IsNotExist(err) {
-		t.Error("copyDir() should copy subdir/file2.txt")
-	}
+func TestCopyConfigFiles_MissingTemplatesDir(t *testing.T) {
+	user := &User{Name: "testuser", HomeDir: t.TempDir()}
 
-	// Verify content
-	content1, err := os.ReadFile(copiedFile1)
-	if err != nil {
-		t.Fatalf("Failed to read copied file1: %v", err)
-	}
-	if string(content1) != "content1" {
-		t.Error("Copied file1 content doesn't match")
+	if err := CopyConfigFiles(fstest.MapFS{}, user); err == nil {
+		t.Error("CopyConfigFiles() should error when files/ is missing from the templates")
 	}
 }
 
 // Integration test for flakes
 
 func TestPrepareEnvironment_WithFlakes(t *testing.T) {
-	// Skip if template files don't exist
-	if _, err := os.Stat("templates/files/flake.nix"); os.IsNotExist(err) {
-		t.Skip("Skipping test: flake.nix template not found")
-	}
-
 	// Create temporary home directory
 	tmpHome := t.TempDir()
 
@@ -395,7 +405,7 @@ flakes:
 	}
 
 	// Run PrepareEnvironment
-	if err := PrepareEnvironment(user); err != nil {
+	if err := PrepareEnvironment(templates.FS, user); err != nil {
 		t.Fatalf("PrepareEnvironment() failed: %v", err)
 	}
 
@@ -516,7 +526,30 @@ func TestLocalFlakeUpdateArgs_NoFlakes(t *testing.T) {
 	}
 }
 
+func TestUpdateLocalFlakes_RunsNixFlakeUpdate(t *testing.T) {
+	exec := utilstest.StubExec(t)
+	user := &User{
+		Name:    "testuser",
+		HomeDir: t.TempDir(),
+		Flakes: []Flake{
+			{Name: "dotfiles", URL: "path:/Users/me/dotfiles"},
+			{Name: "remote", URL: "github:user/repo"},
+		},
+	}
+
+	if err := UpdateLocalFlakes(user); err != nil {
+		t.Fatalf("UpdateLocalFlakes() failed: %v", err)
+	}
+
+	nixDir := filepath.Join(user.HomeDir, ".camp", "nix")
+	want := [][]string{append([]string{"nix"}, localFlakeUpdateArgs(nixDir, user.Flakes)...)}
+	if !slices.EqualFunc(exec.Calls, want, slices.Equal) {
+		t.Errorf("UpdateLocalFlakes() ran %v, want %v", exec.Calls, want)
+	}
+}
+
 func TestUpdateLocalFlakes_NoLocalFlakesIsNoop(t *testing.T) {
+	exec := utilstest.StubExec(t)
 	user := &User{
 		Name:    "testuser",
 		HomeDir: t.TempDir(),
@@ -527,5 +560,8 @@ func TestUpdateLocalFlakes_NoLocalFlakesIsNoop(t *testing.T) {
 
 	if err := UpdateLocalFlakes(user); err != nil {
 		t.Errorf("UpdateLocalFlakes() should be a no-op without local flakes, got: %v", err)
+	}
+	if len(exec.Calls) != 0 {
+		t.Errorf("UpdateLocalFlakes() should run nothing without local flakes, ran %v", exec.Calls)
 	}
 }

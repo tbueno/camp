@@ -1,23 +1,22 @@
 package system
 
 import (
+	"camp/internal/utils"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
-// NukeEnvironment removes camp and Nix completely from the system
-func NukeEnvironment(user *User, out io.Writer) error {
+// NukeEnvironment removes camp and Nix completely from the system. When uninstallNix is
+// false (Nix is already gone) it only removes the files camp and Nix left behind.
+func NukeEnvironment(user *User, out io.Writer, uninstallNix bool) error {
 	// Step 1: Uninstall Nix (platform-specific)
-	fmt.Fprintf(out, "Uninstalling Nix...\n")
-	if err := UninstallNix(user.Platform, out); err != nil {
-		// Log error but continue with file cleanup
-		fmt.Fprintf(out, "⚠️  Warning: Nix uninstall encountered an error: %v\n", err)
-		fmt.Fprintf(out, "Continuing with file cleanup...\n")
+	if uninstallNix {
+		uninstallNixAndReport(user.Platform, out)
 	} else {
-		fmt.Fprintf(out, "✓ Nix uninstalled successfully\n")
+		fmt.Fprintf(out, "Nix is not installed, skipping Nix uninstall\n")
 	}
 
 	// Step 2: Remove camp files
@@ -25,6 +24,9 @@ func NukeEnvironment(user *User, out io.Writer) error {
 	campDir := filepath.Join(user.HomeDir, ".camp")
 	if err := RemoveCampFiles(campDir, out); err != nil {
 		return fmt.Errorf("failed to remove camp files: %w", err)
+	}
+	if err := RemoveCampEnvrc(user.HomeDir, out); err != nil {
+		return fmt.Errorf("failed to remove camp .envrc: %w", err)
 	}
 	fmt.Fprintf(out, "✓ Camp files removed successfully\n")
 
@@ -40,25 +42,30 @@ func NukeEnvironment(user *User, out io.Writer) error {
 	return nil
 }
 
+// uninstallNixAndReport uninstalls Nix, reporting a failure as a warning so file cleanup continues
+func uninstallNixAndReport(platform string, out io.Writer) {
+	fmt.Fprintf(out, "Uninstalling Nix...\n")
+	if err := UninstallNix(platform, out); err != nil {
+		fmt.Fprintf(out, "⚠️  Warning: Nix uninstall encountered an error: %v\n", err)
+		fmt.Fprintf(out, "Continuing with file cleanup...\n")
+		return
+	}
+	fmt.Fprintf(out, "✓ Nix uninstalled successfully\n")
+}
+
 // UninstallNix uninstalls Nix package manager based on the platform
 func UninstallNix(platform string, out io.Writer) error {
 	// On macOS, first try to uninstall nix-darwin
 	if platform == "darwin" {
 		fmt.Fprintf(out, "  Uninstalling nix-darwin...\n")
-		cmd := exec.Command("sudo", "darwin-uninstaller")
-		cmd.Stdout = out
-		cmd.Stderr = out
-		if err := cmd.Run(); err != nil {
+		if err := utils.Exec(out, out, "sudo", "darwin-uninstaller"); err != nil {
 			fmt.Fprintf(out, "  ⚠️  darwin-uninstaller not found or failed (this is OK if not using nix-darwin)\n")
 		}
 	}
 
 	// Run the Nix installer's uninstall command
 	fmt.Fprintf(out, "  Running Nix uninstaller...\n")
-	cmd := exec.Command("/nix/nix-installer", "uninstall")
-	cmd.Stdout = out
-	cmd.Stderr = out
-	if err := cmd.Run(); err != nil {
+	if err := utils.Exec(out, out, "/nix/nix-installer", "uninstall"); err != nil {
 		return fmt.Errorf("nix-installer uninstall failed: %w", err)
 	}
 
@@ -68,6 +75,26 @@ func UninstallNix(platform string, out io.Writer) error {
 // RemoveCampFiles removes the ~/.camp directory and its contents
 func RemoveCampFiles(campDir string, out io.Writer) error {
 	return deleteIfExists(campDir, out)
+}
+
+// RemoveCampEnvrc removes ~/.envrc when camp bootstrap created it, keeping any other .envrc
+func RemoveCampEnvrc(homeDir string, out io.Writer) error {
+	envrcPath := filepath.Join(homeDir, ".envrc")
+
+	content, err := os.ReadFile(envrcPath)
+	if os.IsNotExist(err) {
+		fmt.Fprintf(out, "  • %s (not found, skipping)\n", envrcPath)
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("failed to read %s: %w", envrcPath, err)
+	}
+
+	if !strings.HasPrefix(string(content), envrcMarker) {
+		fmt.Fprintf(out, "  • %s (not created by camp, keeping)\n", envrcPath)
+		return nil
+	}
+
+	return deleteIfExists(envrcPath, out)
 }
 
 // RemoveNixStateFiles removes home-manager and Nix state directories

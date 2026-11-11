@@ -166,8 +166,14 @@ camp/
 ├── internal/            # Internal packages
 │   ├── system/          # System info, config, templates
 │   └── utils/           # Utilities
+│       └── utilstest/   # Test helpers (StubExec)
+├── templates/           # Nix templates, embedded into the binary (templates.FS)
 └── main.go              # Entry point (minimal)
 ```
+
+Templates under `templates/initial/` and `templates/files/` are compiled into the binary with
+`//go:embed`. Rebuild the binary after editing them; camp never reads templates from the
+current directory.
 
 - Keep command logic in `cmd/` package
 - System logic in `internal/system/`
@@ -212,6 +218,27 @@ func TestWithConfig(t *testing.T) {
     // Test runs, tmpDir is cleaned up automatically
 }
 ```
+
+### Never Run Real System Commands
+
+Unit tests must not run `sudo`, `nix`, `home-manager` or the Nix uninstaller. Run external
+commands through `utils.Exec` (or `utils.RunCommand`, which uses it) and stub it in tests:
+
+```go
+func TestRebuild(t *testing.T) {
+    exec := utilstest.StubExec(t) // records commands instead of running them
+
+    // ... run the code under test ...
+
+    if !exec.Called("home-manager", "switch") {
+        t.Errorf("expected home-manager switch, got:\n%s", exec)
+    }
+}
+```
+
+Set `exec.Err` to simulate a failing command. Command tests in `cmd/` also replace
+`currentUser` (see `stubCurrentUser`) so they never touch your real home directory:
+`system.NewUser()` resolves it from the OS and ignores `$HOME`.
 
 ### Running Tests
 

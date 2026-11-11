@@ -23,8 +23,8 @@ var nukeCmd = &cobra.Command{
 WARNING: This is a destructive operation that cannot be undone!
 
 This command will:
-  1. Uninstall Nix package manager (including nix-darwin on macOS)
-  2. Remove all camp configuration files from ~/.camp/
+  1. Uninstall Nix package manager (including nix-darwin on macOS), if installed
+  2. Remove all camp configuration files from ~/.camp/ and the ~/.envrc camp created
   3. Remove home-manager configuration and state
   4. Remove Nix state directories
 
@@ -43,17 +43,17 @@ func init() {
 }
 
 func runNuke(cmd *cobra.Command, args []string) error {
-	// Check if Nix is installed
-	if !nixInstalledChecker() {
-		return fmt.Errorf("nix is not installed. No need to run nuke")
-	}
+	nixInstalled := nixInstalledChecker()
 
 	// Prompt user for confirmation (unless --yes flag is used)
 	if !skipConfirmation {
 		fmt.Fprintf(cmd.OutOrStdout(), "⚠️  WARNING: This will completely remove camp and Nix from your system!\n\n")
 		fmt.Fprintf(cmd.OutOrStdout(), "This will delete:\n")
-		fmt.Fprintf(cmd.OutOrStdout(), "  • Nix package manager\n")
+		if nixInstalled {
+			fmt.Fprintf(cmd.OutOrStdout(), "  • Nix package manager\n")
+		}
 		fmt.Fprintf(cmd.OutOrStdout(), "  • All camp configuration (~/.camp/)\n")
+		fmt.Fprintf(cmd.OutOrStdout(), "  • The ~/.envrc created by camp bootstrap\n")
 		fmt.Fprintf(cmd.OutOrStdout(), "  • home-manager configuration and state\n")
 		fmt.Fprintf(cmd.OutOrStdout(), "  • Nix state directories\n\n")
 		fmt.Fprintf(cmd.OutOrStdout(), "Are you sure you want to continue? [y/N]: ")
@@ -72,11 +72,11 @@ func runNuke(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get current user context
-	user := system.NewUser()
+	user := currentUser()
 
 	// Execute nuke
 	fmt.Fprintf(cmd.OutOrStdout(), "\nStarting nuke process...\n")
-	if err := system.NukeEnvironment(user, cmd.OutOrStdout()); err != nil {
+	if err := system.NukeEnvironment(user, cmd.OutOrStdout(), nixInstalled); err != nil {
 		return fmt.Errorf("nuke failed: %w", err)
 	}
 
