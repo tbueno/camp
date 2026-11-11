@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 // NukeEnvironment removes camp and Nix completely from the system. When uninstallNix is
@@ -89,7 +88,7 @@ func RemoveCampEnvrc(homeDir string, out io.Writer) error {
 		return fmt.Errorf("failed to read %s: %w", envrcPath, err)
 	}
 
-	if !strings.HasPrefix(string(content), envrcMarker) {
+	if !isCampEnvrc(content) {
 		fmt.Fprintf(out, "  • %s (not created by camp, keeping)\n", envrcPath)
 		return nil
 	}

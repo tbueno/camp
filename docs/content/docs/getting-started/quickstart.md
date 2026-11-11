@@ -22,6 +22,14 @@ This will:
 - Create the `~/.camp` directory
 - Generate initial configuration files
 - Set up Nix flake templates
+- Create `~/.envrc` so direnv loads the Camp environment
+
+If you already have a `~/.envrc` that Camp didn't create, bootstrap keeps it
+and prints the line to add so direnv loads the Camp environment:
+
+```bash
+use flake ~/.camp/nix
+```
 
 ## 2. View System Information
 

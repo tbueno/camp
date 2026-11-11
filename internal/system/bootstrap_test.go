@@ -367,3 +367,118 @@ func TestRunBootstrap_SkipsAlreadyInstalledCommands(t *testing.T) {
 		t.Error("Should not have executed install command for already installed application")
 	}
 }
+
+func TestCreateEnvrc_WritesWhenMissing(t *testing.T) {
+	home := t.TempDir()
+	campPath := filepath.Join(home, ".camp")
+	var out bytes.Buffer
+
+	if err := createEnvrc(&User{HomeDir: home}, campPath, &out, false); err != nil {
+		t.Fatalf("createEnvrc() error = %v", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(home, ".envrc"))
+	if err != nil {
+		t.Fatalf("expected .envrc to be created: %v", err)
+	}
+	want := envrcMarker + "\nuse flake " + campPath + "/nix\n"
+	if string(content) != want {
+		t.Errorf(".envrc = %q, want %q", content, want)
+	}
+}
+
+func TestCreateEnvrc_RewritesCampEnvrc(t *testing.T) {
+	home := t.TempDir()
+	campPath := filepath.Join(home, ".camp")
+	envrcPath := filepath.Join(home, ".envrc")
+	if err := os.WriteFile(envrcPath, []byte(envrcMarker+"\nuse flake /old/path\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+
+	if err := createEnvrc(&User{HomeDir: home}, campPath, &out, false); err != nil {
+		t.Fatalf("createEnvrc() error = %v", err)
+	}
+
+	content, _ := os.ReadFile(envrcPath)
+	if !strings.Contains(string(content), "use flake "+campPath+"/nix") {
+		t.Errorf("expected camp .envrc to be rewritten, got %q", content)
+	}
+}
+
+func TestCreateEnvrc_KeepsForeignEnvrc(t *testing.T) {
+	home := t.TempDir()
+	campPath := filepath.Join(home, ".camp")
+	envrcPath := filepath.Join(home, ".envrc")
+	userContent := "export FOO=bar\n"
+	if err := os.WriteFile(envrcPath, []byte(userContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, dryRun := range []bool{false, true} {
+		var out bytes.Buffer
+
+		if err := createEnvrc(&User{HomeDir: home}, campPath, &out, dryRun); err != nil {
+			t.Fatalf("createEnvrc(dryRun=%v) error = %v", dryRun, err)
+		}
+
+		content, _ := os.ReadFile(envrcPath)
+		if string(content) != userContent {
+			t.Errorf("dryRun=%v: expected .envrc to be kept, got %q", dryRun, content)
+		}
+		if !strings.Contains(out.String(), "use flake "+campPath+"/nix") {
+			t.Errorf("dryRun=%v: expected output to show the use flake line, got %q", dryRun, out.String())
+		}
+	}
+}
+
+func TestCreateEnvrc_DryRunWritesNothing(t *testing.T) {
+	home := t.TempDir()
+	var out bytes.Buffer
+
+	if err := createEnvrc(&User{HomeDir: home}, filepath.Join(home, ".camp"), &out, true); err != nil {
+		t.Fatalf("createEnvrc() error = %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(home, ".envrc")); !os.IsNotExist(err) {
+		t.Error("expected dry run not to create .envrc")
+	}
+	if !strings.Contains(out.String(), "[DRY RUN]") {
+		t.Errorf("expected dry run output, got %q", out.String())
+	}
+}
+
+func TestBootstrapPlatforms_DryRunReportsEnvrc(t *testing.T) {
+	platforms := map[string]func(string, *User, *bytes.Buffer) error{
+		"mac": func(campPath string, user *User, out *bytes.Buffer) error {
+			return bootstrapMac(campPath, templates.FS, user, out, true)
+		},
+		"linux": func(campPath string, user *User, out *bytes.Buffer) error {
+			return bootstrapLinux(campPath, templates.FS, user, out, true)
+		},
+	}
+
+	for name, bootstrap := range platforms {
+		t.Run(name, func(t *testing.T) {
+			home := t.TempDir()
+			campPath := filepath.Join(home, ".camp")
+			user := &User{Name: "tester", HomeDir: home, Architecture: "arm64"}
+			var out bytes.Buffer
+
+			if err := bootstrap(campPath, user, &out); err != nil {
+				t.Fatalf("dry run error = %v", err)
+			}
+
+			if !strings.Contains(out.String(), "[DRY RUN] Would create .envrc file: "+filepath.Join(home, ".envrc")) {
+				t.Errorf("expected dry run to report the .envrc step, got:\n%s", out.String())
+			}
+			entries, err := os.ReadDir(home)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(entries) != 0 {
+				t.Errorf("expected dry run to write nothing, found %d entries in home", len(entries))
+			}
+		})
+	}
+}
