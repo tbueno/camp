@@ -64,7 +64,6 @@ test-bootstrap:
 		-v "$(PWD)/camp:/home/testuser/bin/camp:ro" \
 		-v "$(PWD)/test/integration/scripts:/home/testuser/tests:ro" \
 		-v "$(PWD)/test/integration/fixtures:/home/testuser/fixtures:ro" \
-		-v "$(PWD)/templates:/home/testuser/templates:ro" \
 		camp-integration-test:latest \
 		/bin/bash /home/testuser/tests/test-bootstrap.sh
 
@@ -77,7 +76,6 @@ test-rebuild:
 		-v "$(PWD)/camp:/home/testuser/bin/camp:ro" \
 		-v "$(PWD)/test/integration/scripts:/home/testuser/tests:ro" \
 		-v "$(PWD)/test/integration/fixtures:/home/testuser/fixtures:ro" \
-		-v "$(PWD)/templates:/home/testuser/templates:ro" \
 		camp-integration-test:latest \
 		/bin/bash /home/testuser/tests/test-rebuild.sh
 
@@ -90,7 +88,6 @@ test-packages:
 		-v "$(PWD)/camp:/home/testuser/bin/camp:ro" \
 		-v "$(PWD)/test/integration/scripts:/home/testuser/tests:ro" \
 		-v "$(PWD)/test/integration/fixtures:/home/testuser/fixtures:ro" \
-		-v "$(PWD)/templates:/home/testuser/templates:ro" \
 		camp-integration-test:latest \
 		/bin/bash /home/testuser/tests/test-packages.sh
 
@@ -103,7 +100,6 @@ test-flakes:
 		-v "$(PWD)/camp:/home/testuser/bin/camp:ro" \
 		-v "$(PWD)/test/integration/scripts:/home/testuser/tests:ro" \
 		-v "$(PWD)/test/integration/fixtures:/home/testuser/fixtures:ro" \
-		-v "$(PWD)/templates:/home/testuser/templates:ro" \
 		camp-integration-test:latest \
 		/bin/bash /home/testuser/tests/test-flakes.sh
 
@@ -116,7 +112,6 @@ test-nuke:
 		-v "$(PWD)/camp:/home/testuser/bin/camp:ro" \
 		-v "$(PWD)/test/integration/scripts:/home/testuser/tests:ro" \
 		-v "$(PWD)/test/integration/fixtures:/home/testuser/fixtures:ro" \
-		-v "$(PWD)/templates:/home/testuser/templates:ro" \
 		camp-integration-test:latest \
 		/bin/bash /home/testuser/tests/test-nuke.sh
 

@@ -47,11 +47,8 @@ Follow the [home-manager installation guide](https://github.com/nix-community/ho
 git clone https://github.com/tbueno/camp
 cd camp
 
-# Build the binary
-go build -o camp
-
-# Optionally move to your PATH
-sudo mv camp /usr/local/bin/
+# Build the binary and install it to /usr/local/bin (asks for your password)
+make install
 ```
 
 ### Option 2: Install with Go
@@ -61,6 +58,10 @@ go install github.com/tbueno/camp@latest
 ```
 
 This will install Camp to your `$GOPATH/bin` directory.
+
+The Nix templates Camp writes to `~/.camp/nix/` are built into the binary, so you can run
+`camp` from any directory once it is on your `PATH`. Rebuild and reinstall the binary to pick
+up template changes.
 
 ## Verify Installation
 

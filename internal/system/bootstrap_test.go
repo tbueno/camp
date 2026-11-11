@@ -2,9 +2,80 @@ package system
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
+
+	"camp/templates"
 )
+
+func TestCopyBinFiles_CopiesScriptsAsExecutable(t *testing.T) {
+	campPath := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(campPath, "bin"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	templDir := fstest.MapFS{
+		"initial/bin/bootstrap":   {Data: []byte("#!/bin/sh\necho bootstrap\n")},
+		"initial/bin/install_nix": {Data: []byte("#!/bin/sh\necho install\n")},
+	}
+
+	if err := copyBinFiles(templDir, campPath, &bytes.Buffer{}, false); err != nil {
+		t.Fatalf("copyBinFiles failed: %v", err)
+	}
+
+	for _, name := range []string{"bootstrap", "install_nix"} {
+		path := filepath.Join(campPath, "bin", name)
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("expected %s to be copied: %v", name, err)
+		}
+		if info.Mode().Perm() != 0755 {
+			t.Errorf("expected %s to have mode 0755, got %v", name, info.Mode().Perm())
+		}
+		content, _ := os.ReadFile(path)
+		if string(content) != string(templDir["initial/bin/"+name].Data) {
+			t.Errorf("unexpected content for %s: %q", name, content)
+		}
+	}
+}
+
+func TestCopyBinFiles_DryRunWritesNothing(t *testing.T) {
+	campPath := t.TempDir()
+	templDir := fstest.MapFS{
+		"initial/bin/bootstrap": {Data: []byte("#!/bin/sh\n")},
+	}
+	var output bytes.Buffer
+
+	if err := copyBinFiles(templDir, campPath, &output, true); err != nil {
+		t.Fatalf("copyBinFiles failed: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(campPath, "bin", "bootstrap")); !os.IsNotExist(err) {
+		t.Error("expected no file to be written in dry-run mode")
+	}
+	if !strings.Contains(output.String(), "[DRY RUN] Would copy bin file") {
+		t.Errorf("expected dry-run message, got: %s", output.String())
+	}
+}
+
+func TestCopyBinFiles_FromEmbeddedTemplates(t *testing.T) {
+	campPath := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(campPath, "bin"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := copyBinFiles(templates.FS, campPath, &bytes.Buffer{}, false); err != nil {
+		t.Fatalf("copyBinFiles failed: %v", err)
+	}
+
+	for _, name := range []string{"bootstrap", "install_nix"} {
+		if _, err := os.Stat(filepath.Join(campPath, "bin", name)); err != nil {
+			t.Errorf("expected %s to be copied from embedded templates: %v", name, err)
+		}
+	}
+}
 
 func TestGetDefaultBootstrapConfig(t *testing.T) {
 	config := GetDefaultBootstrapConfig()

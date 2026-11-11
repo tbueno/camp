@@ -2,10 +2,11 @@ package cmd
 
 import (
 	"fmt"
-	"os/exec"
 	"path/filepath"
 
 	"camp/internal/system"
+	"camp/internal/utils"
+	"camp/templates"
 
 	"github.com/spf13/cobra"
 )
@@ -39,7 +40,7 @@ func init() {
 
 func runUpdate(cmd *cobra.Command, args []string) error {
 	// Get current user context
-	user := system.NewUser()
+	user := currentUser()
 
 	// Output update start message
 	fmt.Fprintf(cmd.OutOrStdout(), "Starting flake update...\n")
@@ -48,7 +49,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 
 	// Prepare environment (copy files and render templates)
 	fmt.Fprintf(cmd.OutOrStdout(), "Preparing environment...\n")
-	if err := system.PrepareEnvironment(user); err != nil {
+	if err := system.PrepareEnvironment(templates.FS, user); err != nil {
 		return fmt.Errorf("failed to prepare environment: %w", err)
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "✓ Environment prepared successfully\n\n")
@@ -57,20 +58,16 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(cmd.OutOrStdout(), "Updating flake dependencies...\n")
 	nixDir := filepath.Join(user.HomeDir, ".camp", "nix")
 
-	// Run nix flake update
-	nixCmd := exec.Command(
+	err := utils.Exec(
+		cmd.OutOrStdout(),
+		cmd.ErrOrStderr(),
 		"nix",
 		"--extra-experimental-features", "nix-command",
 		"--extra-experimental-features", "flakes",
 		"flake", "update",
 		"--flake", nixDir,
 	)
-
-	// Stream output to user
-	nixCmd.Stdout = cmd.OutOrStdout()
-	nixCmd.Stderr = cmd.ErrOrStderr()
-
-	if err := nixCmd.Run(); err != nil {
+	if err != nil {
 		return fmt.Errorf("nix flake update failed: %w", err)
 	}
 

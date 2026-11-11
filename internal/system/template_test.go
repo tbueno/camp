@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
+
+	"camp/templates"
 )
 
 func TestNewTemplateData(t *testing.T) {
@@ -47,15 +50,8 @@ func TestNewTemplateData(t *testing.T) {
 }
 
 func TestCompileTemplate(t *testing.T) {
-	// Create temporary directory
-	tmpDir := t.TempDir()
-	templatePath := filepath.Join(tmpDir, "test.tmpl")
-
 	// Write a simple template
 	templateContent := `Hello {{.Name}}! Platform: {{.Platform}}`
-	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
-		t.Fatalf("Failed to write template: %v", err)
-	}
 
 	// Create template data
 	data := &TemplateData{
@@ -64,7 +60,7 @@ func TestCompileTemplate(t *testing.T) {
 	}
 
 	// Compile template
-	result, err := CompileTemplate(templatePath, data)
+	result, err := CompileTemplate("test.tmpl", templateContent, data)
 	if err != nil {
 		t.Fatalf("CompileTemplate() failed: %v", err)
 	}
@@ -76,16 +72,9 @@ func TestCompileTemplate(t *testing.T) {
 }
 
 func TestCompileTemplate_WithEnvVars(t *testing.T) {
-	// Create temporary directory
-	tmpDir := t.TempDir()
-	templatePath := filepath.Join(tmpDir, "test.tmpl")
-
 	// Write template with EnvVars iteration
 	templateContent := `{{range $key, $value := .EnvVars}}{{$key}}={{$value}}
 {{end}}`
-	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
-		t.Fatalf("Failed to write template: %v", err)
-	}
 
 	// Create template data
 	data := &TemplateData{
@@ -96,7 +85,7 @@ func TestCompileTemplate_WithEnvVars(t *testing.T) {
 	}
 
 	// Compile template
-	result, err := CompileTemplate(templatePath, data)
+	result, err := CompileTemplate("test.tmpl", templateContent, data)
 	if err != nil {
 		t.Fatalf("CompileTemplate() failed: %v", err)
 	}
@@ -111,29 +100,29 @@ func TestCompileTemplate_WithEnvVars(t *testing.T) {
 	}
 }
 
-func TestCompileTemplate_NonExistentFile(t *testing.T) {
-	data := &TemplateData{Name: "test"}
+func TestRenderFlakeTemplate_MissingTemplate(t *testing.T) {
+	user := &User{
+		Name:    "testuser",
+		HomeDir: t.TempDir(),
+		EnvVars: make(map[string]string),
+	}
 
-	_, err := CompileTemplate("/nonexistent/template.tmpl", data)
+	err := RenderFlakeTemplate(fstest.MapFS{}, user)
 	if err == nil {
-		t.Error("CompileTemplate() should error for non-existent file")
+		t.Fatal("RenderFlakeTemplate() should error when files/flake.nix is missing")
+	}
+	if !strings.Contains(err.Error(), "failed to read template file") {
+		t.Errorf("Unexpected error: %v", err)
 	}
 }
 
 func TestCompileTemplate_InvalidTemplate(t *testing.T) {
-	// Create temporary directory
-	tmpDir := t.TempDir()
-	templatePath := filepath.Join(tmpDir, "invalid.tmpl")
-
 	// Write invalid template syntax
 	templateContent := `{{.Name`
-	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
-		t.Fatalf("Failed to write template: %v", err)
-	}
 
 	data := &TemplateData{Name: "test"}
 
-	_, err := CompileTemplate(templatePath, data)
+	_, err := CompileTemplate("invalid.tmpl", templateContent, data)
 	if err == nil {
 		t.Error("CompileTemplate() should error for invalid template syntax")
 	}
@@ -169,31 +158,26 @@ func TestRenderFlakeTemplate(t *testing.T) {
 		EnvVars:      make(map[string]string),
 	}
 
-	// NOTE: We can't fully test RenderFlakeTemplate without the actual template file
-	// This test would need the templates/files/flake.nix to exist
-	// For now, we'll test that it properly errors when template doesn't exist
-	err := RenderFlakeTemplate(user)
-	if err == nil {
-		// Template file might exist in the project, verify output
-		outputPath := filepath.Join(tmpHome, ".camp", "nix", "flake.nix")
-		if _, statErr := os.Stat(outputPath); statErr != nil {
-			t.Error("RenderFlakeTemplate() should create output file")
-		}
-	} else {
-		// Expected error if template doesn't exist
-		if !strings.Contains(err.Error(), "failed to compile flake template") &&
-			!strings.Contains(err.Error(), "failed to read template file") {
-			t.Errorf("Unexpected error: %v", err)
-		}
+	templDir := fstest.MapFS{
+		"files/flake.nix": {Data: []byte(`user = "{{.Name}}";{{range $key, $value := .EnvVars}} {{$key}}={{$value}}{{end}}`)},
+	}
+
+	if err := RenderFlakeTemplate(templDir, user); err != nil {
+		t.Fatalf("RenderFlakeTemplate() failed: %v", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(tmpHome, ".camp", "nix", "flake.nix"))
+	if err != nil {
+		t.Fatalf("RenderFlakeTemplate() should create output file: %v", err)
+	}
+
+	want := `user = "testuser"; BROWSER=firefox EDITOR=nvim`
+	if string(content) != want {
+		t.Errorf("RenderFlakeTemplate() rendered %q, want %q", content, want)
 	}
 }
 
 func TestRenderFlakeTemplate_CreatesDirectory(t *testing.T) {
-	// Skip if template file doesn't exist
-	if _, err := os.Stat("templates/files/flake.nix"); os.IsNotExist(err) {
-		t.Skip("Skipping test: flake.nix template not found")
-	}
-
 	// Create temporary home directory
 	tmpHome := t.TempDir()
 
@@ -222,7 +206,7 @@ func TestRenderFlakeTemplate_CreatesDirectory(t *testing.T) {
 	}
 
 	// Render template
-	if err := RenderFlakeTemplate(user); err != nil {
+	if err := RenderFlakeTemplate(templates.FS, user); err != nil {
 		t.Fatalf("RenderFlakeTemplate() failed: %v", err)
 	}
 
@@ -296,16 +280,9 @@ func TestNewTemplateData_WithFlakes(t *testing.T) {
 }
 
 func TestCompileTemplate_WithFlakes(t *testing.T) {
-	// Create temporary directory
-	tmpDir := t.TempDir()
-	templatePath := filepath.Join(tmpDir, "test.tmpl")
-
 	// Write template with flakes iteration
 	templateContent := `{{range .Flakes}}flake: {{.Name}} url: {{.URL}}
 {{end}}`
-	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
-		t.Fatalf("Failed to write template: %v", err)
-	}
 
 	// Create template data with flakes
 	data := &TemplateData{
@@ -316,7 +293,7 @@ func TestCompileTemplate_WithFlakes(t *testing.T) {
 	}
 
 	// Compile template
-	result, err := CompileTemplate(templatePath, data)
+	result, err := CompileTemplate("test.tmpl", templateContent, data)
 	if err != nil {
 		t.Fatalf("CompileTemplate() failed: %v", err)
 	}
@@ -335,16 +312,9 @@ func TestCompileTemplate_WithFlakes(t *testing.T) {
 }
 
 func TestCompileTemplate_WithFlakeOutputs(t *testing.T) {
-	// Create temporary directory
-	tmpDir := t.TempDir()
-	templatePath := filepath.Join(tmpDir, "test.tmpl")
-
 	// Write template with flake outputs iteration
 	templateContent := `{{range $flake := .Flakes}}{{range .Outputs}}{{$flake.Name}}.{{.Name}} type={{.Type}}
 {{end}}{{end}}`
-	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
-		t.Fatalf("Failed to write template: %v", err)
-	}
 
 	// Create template data with flakes and outputs
 	data := &TemplateData{
@@ -361,7 +331,7 @@ func TestCompileTemplate_WithFlakeOutputs(t *testing.T) {
 	}
 
 	// Compile template
-	result, err := CompileTemplate(templatePath, data)
+	result, err := CompileTemplate("test.tmpl", templateContent, data)
 	if err != nil {
 		t.Fatalf("CompileTemplate() failed: %v", err)
 	}
@@ -380,16 +350,9 @@ func TestCompileTemplate_WithFlakeOutputs(t *testing.T) {
 }
 
 func TestCompileTemplate_WithFlakeFollows(t *testing.T) {
-	// Create temporary directory
-	tmpDir := t.TempDir()
-	templatePath := filepath.Join(tmpDir, "test.tmpl")
-
 	// Write template with follows iteration
 	templateContent := `{{range .Flakes}}{{range $key, $value := .Follows}}{{$key}}={{$value}}
 {{end}}{{end}}`
-	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
-		t.Fatalf("Failed to write template: %v", err)
-	}
 
 	// Create template data with follows
 	data := &TemplateData{
@@ -406,7 +369,7 @@ func TestCompileTemplate_WithFlakeFollows(t *testing.T) {
 	}
 
 	// Compile template
-	result, err := CompileTemplate(templatePath, data)
+	result, err := CompileTemplate("test.tmpl", templateContent, data)
 	if err != nil {
 		t.Fatalf("CompileTemplate() failed: %v", err)
 	}
@@ -422,10 +385,6 @@ func TestCompileTemplate_WithFlakeFollows(t *testing.T) {
 }
 
 func TestCompileTemplate_WithSystemAndHomeOutputs(t *testing.T) {
-	// Create temporary directory
-	tmpDir := t.TempDir()
-	templatePath := filepath.Join(tmpDir, "test.tmpl")
-
 	// Write template that filters by output type
 	templateContent := `System outputs:
 {{range $flake := .Flakes}}{{range .Outputs}}{{if eq .Type "system"}}{{$flake.Name}}.{{.Name}}
@@ -433,9 +392,6 @@ func TestCompileTemplate_WithSystemAndHomeOutputs(t *testing.T) {
 Home outputs:
 {{range $flake := .Flakes}}{{range .Outputs}}{{if eq .Type "home"}}{{$flake.Name}}.{{.Name}}
 {{end}}{{end}}{{end}}`
-	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
-		t.Fatalf("Failed to write template: %v", err)
-	}
 
 	// Create template data with mixed output types
 	data := &TemplateData{
@@ -452,7 +408,7 @@ Home outputs:
 	}
 
 	// Compile template
-	result, err := CompileTemplate(templatePath, data)
+	result, err := CompileTemplate("test.tmpl", templateContent, data)
 	if err != nil {
 		t.Fatalf("CompileTemplate() failed: %v", err)
 	}
@@ -590,16 +546,9 @@ func TestRenderNixValue_List(t *testing.T) {
 }
 
 func TestCompileTemplate_WithRenderNixValue(t *testing.T) {
-	// Create temporary directory
-	tmpDir := t.TempDir()
-	templatePath := filepath.Join(tmpDir, "test.tmpl")
-
 	// Write template that uses renderNixValue function
 	templateContent := `{{range $key, $value := .Flakes}}{{range $argKey, $argValue := .Args}}{{ $argKey }} = {{ renderNixValue $argValue }};
 {{end}}{{end}}`
-	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
-		t.Fatalf("Failed to write template: %v", err)
-	}
 
 	// Create template data with flake args
 	data := &TemplateData{
@@ -619,7 +568,7 @@ func TestCompileTemplate_WithRenderNixValue(t *testing.T) {
 	}
 
 	// Compile template
-	result, err := CompileTemplate(templatePath, data)
+	result, err := CompileTemplate("test.tmpl", templateContent, data)
 	if err != nil {
 		t.Fatalf("CompileTemplate() failed: %v", err)
 	}
@@ -643,10 +592,6 @@ func TestCompileTemplate_WithRenderNixValue(t *testing.T) {
 }
 
 func TestCompileTemplate_FlakeWithArgs(t *testing.T) {
-	// Create temporary directory
-	tmpDir := t.TempDir()
-	templatePath := filepath.Join(tmpDir, "flake.nix")
-
 	// Write simplified flake template with args
 	templateContent := `{
   outputs = { ... }:
@@ -692,9 +637,6 @@ func TestCompileTemplate_FlakeWithArgs(t *testing.T) {
     };
   };
 }`
-	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
-		t.Fatalf("Failed to write template: %v", err)
-	}
 
 	// Create template data with flake args
 	data := &TemplateData{
@@ -720,7 +662,7 @@ func TestCompileTemplate_FlakeWithArgs(t *testing.T) {
 	}
 
 	// Compile template
-	result, err := CompileTemplate(templatePath, data)
+	result, err := CompileTemplate("flake.nix", templateContent, data)
 	if err != nil {
 		t.Fatalf("CompileTemplate() failed: %v", err)
 	}
@@ -823,23 +765,17 @@ func TestNewTemplateData_WithEmptyPackages(t *testing.T) {
 }
 
 func TestCompileTemplate_WithPackages(t *testing.T) {
-	tmpDir := t.TempDir()
-	templatePath := filepath.Join(tmpDir, "test.tmpl")
-
 	templateContent := `customPackages = [
 {{- range .Packages }}
   "{{ . }}"
 {{- end }}
 ];`
-	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
-		t.Fatalf("Failed to write template: %v", err)
-	}
 
 	data := &TemplateData{
 		Packages: []string{"git", "neovim", "ripgrep"},
 	}
 
-	result, err := CompileTemplate(templatePath, data)
+	result, err := CompileTemplate("test.tmpl", templateContent, data)
 	if err != nil {
 		t.Fatalf("CompileTemplate() failed: %v", err)
 	}
@@ -857,23 +793,17 @@ func TestCompileTemplate_WithPackages(t *testing.T) {
 }
 
 func TestCompileTemplate_WithEmptyPackages(t *testing.T) {
-	tmpDir := t.TempDir()
-	templatePath := filepath.Join(tmpDir, "test.tmpl")
-
 	templateContent := `customPackages = [
 {{- range .Packages }}
   "{{ . }}"
 {{- end }}
 ];`
-	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
-		t.Fatalf("Failed to write template: %v", err)
-	}
 
 	data := &TemplateData{
 		Packages: []string{},
 	}
 
-	result, err := CompileTemplate(templatePath, data)
+	result, err := CompileTemplate("test.tmpl", templateContent, data)
 	if err != nil {
 		t.Fatalf("CompileTemplate() failed: %v", err)
 	}
@@ -886,9 +816,6 @@ func TestCompileTemplate_WithEmptyPackages(t *testing.T) {
 }
 
 func TestCompileTemplate_PackagesInFlakeTemplate(t *testing.T) {
-	tmpDir := t.TempDir()
-	templatePath := filepath.Join(tmpDir, "flake.nix")
-
 	// Simplified flake template with packages in specialArgs
 	templateContent := `{
   outputs = { ... }:
@@ -911,9 +838,6 @@ func TestCompileTemplate_PackagesInFlakeTemplate(t *testing.T) {
     # Configuration using specialArgs
   };
 }`
-	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
-		t.Fatalf("Failed to write template: %v", err)
-	}
 
 	data := &TemplateData{
 		Name:     "testuser",
@@ -925,7 +849,7 @@ func TestCompileTemplate_PackagesInFlakeTemplate(t *testing.T) {
 		Packages: []string{"git", "neovim", "python3"},
 	}
 
-	result, err := CompileTemplate(templatePath, data)
+	result, err := CompileTemplate("flake.nix", templateContent, data)
 	if err != nil {
 		t.Fatalf("CompileTemplate() failed: %v", err)
 	}

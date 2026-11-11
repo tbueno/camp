@@ -66,12 +66,11 @@ run_test() {
     ((TESTS_RUN++))
 
     # Run test in fresh container
-    # Mount camp binary, test scripts, fixtures, and templates
+    # Mount camp binary, test scripts, and fixtures
     if docker run --rm \
         -v "$PROJECT_ROOT/camp:/home/testuser/bin/camp:ro" \
         -v "$SCRIPT_DIR:/home/testuser/tests:ro" \
         -v "$FIXTURES_DIR:/home/testuser/fixtures:ro" \
-        -v "$PROJECT_ROOT/templates:/home/testuser/templates:ro" \
         "$IMAGE_NAME" \
         /bin/bash /home/testuser/tests/"$test_script"; then
 

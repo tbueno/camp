@@ -2,14 +2,14 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"camp/internal/system"
-
-	"github.com/spf13/cobra"
+	"camp/internal/utils/utilstest"
 )
 
 func TestRebuildCommand(t *testing.T) {
@@ -50,140 +50,104 @@ func TestRebuildCommand(t *testing.T) {
 	})
 }
 
-func TestRebuildCommandExecution(t *testing.T) {
-	// Skip if template files don't exist
-	if _, err := os.Stat("templates/files"); os.IsNotExist(err) {
-		t.Skip("Skipping test: templates/files directory not found")
+func TestRebuildCommandExecution_Linux(t *testing.T) {
+	exec := utilstest.StubExec(t)
+	user := stubCurrentUser(t, "linux", "env:\n  TEST_VAR: test_value\n")
+
+	output, err := executeCommand(rebuildCmd)
+	if err != nil {
+		t.Fatalf("rebuild returned error: %v", err)
 	}
 
-	t.Run("execution with missing nix tools", func(t *testing.T) {
-		// Create temporary home directory
-		tmpHome := t.TempDir()
+	if !strings.Contains(output, "✓ Environment prepared successfully") {
+		t.Errorf("Expected output to show environment was prepared, got:\n%s", output)
+	}
+	if !strings.Contains(output, "✓ Environment rebuild completed successfully!") {
+		t.Errorf("Expected output to show rebuild completed, got:\n%s", output)
+	}
 
-		// Create .camp directory and config
-		campDir := filepath.Join(tmpHome, ".camp")
-		if err := os.MkdirAll(campDir, 0755); err != nil {
-			t.Fatalf("Failed to create .camp directory: %v", err)
-		}
+	nixDir := filepath.Join(user.HomeDir, ".camp", "nix")
+	if _, err := os.Stat(filepath.Join(nixDir, "flake.nix")); err != nil {
+		t.Errorf("Expected flake.nix to be created: %v", err)
+	}
 
-		configPath := filepath.Join(campDir, "camp.yml")
-		configContent := `env:
-  TEST_VAR: test_value
-`
-		if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
-			t.Fatalf("Failed to write config: %v", err)
-		}
+	if !exec.Called("home-manager", "switch", "--flake", nixDir+"#testuser") {
+		t.Errorf("Expected home-manager switch to run, got:\n%s", exec)
+	}
+}
 
-		// Save original HOME and restore after test
-		originalHome := os.Getenv("HOME")
-		defer os.Setenv("HOME", originalHome)
-		os.Setenv("HOME", tmpHome)
+func TestRebuildCommandExecution_Darwin(t *testing.T) {
+	exec := utilstest.StubExec(t)
+	user := stubCurrentUser(t, "darwin", "env:\n  EDITOR: nvim\n")
 
-		// Create command with output buffer
-		var output bytes.Buffer
-		var errOutput bytes.Buffer
+	if _, err := executeCommand(rebuildCmd); err != nil {
+		t.Fatalf("rebuild returned error: %v", err)
+	}
 
-		cmd := &cobra.Command{
-			Use:   rebuildCmd.Use,
-			Short: rebuildCmd.Short,
-			Long:  rebuildCmd.Long,
-			RunE:  rebuildCmd.RunE,
-		}
+	nixDir := filepath.Join(user.HomeDir, ".camp", "nix")
+	if !exec.Called("sudo", "nix", "nix-darwin#darwin-rebuild", "switch", "--flake", nixDir+"#testhost") {
+		t.Errorf("Expected darwin-rebuild switch to run, got:\n%s", exec)
+	}
+}
 
-		cmd.SetOut(&output)
-		cmd.SetErr(&errOutput)
-		cmd.SetArgs([]string{})
+func TestRebuildCommandExecution_RefreshesLocalFlakes(t *testing.T) {
+	exec := utilstest.StubExec(t)
+	stubCurrentUser(t, "linux", `flakes:
+  - name: dotfiles
+    url: "path:/tmp/dotfiles"
+    outputs:
+      - name: homeManagerModules.default
+        type: home
+`)
 
-		// Execute command - will likely fail due to missing nix tools
-		err := cmd.Execute()
+	output, err := executeCommand(rebuildCmd)
+	if err != nil {
+		t.Fatalf("rebuild returned error: %v", err)
+	}
 
-		// Verify that preparation succeeded
-		outputStr := output.String()
-		if !strings.Contains(outputStr, "Preparing environment") {
-			t.Error("Expected output to contain 'Preparing environment'")
-		}
+	if !strings.Contains(output, "Refreshing local flakes: dotfiles") {
+		t.Errorf("Expected output to mention refreshed local flakes, got:\n%s", output)
+	}
+	if len(exec.Calls) != 2 || !exec.Called("nix", "flake", "update", "dotfiles") || exec.Calls[1][0] != "home-manager" {
+		t.Errorf("Expected local flake update followed by home-manager switch, got:\n%s", exec)
+	}
+}
 
-		if !strings.Contains(outputStr, "✓ Environment prepared successfully") {
-			t.Error("Expected output to show environment was prepared")
-		}
+func TestRebuildCommandExecution_RebuildFails(t *testing.T) {
+	exec := utilstest.StubExec(t)
+	exec.Err = errors.New("exit status 1")
+	stubCurrentUser(t, "linux", "env:\n  EDITOR: nvim\n")
 
-		// The rebuild will likely fail unless nix is actually installed
-		// That's expected in test environment
-		if err != nil {
-			t.Logf("Rebuild failed as expected (nix tools not installed): %v", err)
-		}
-
-		// Verify files were created during preparation
-		nixDir := filepath.Join(tmpHome, ".camp", "nix")
-		if _, err := os.Stat(nixDir); os.IsNotExist(err) {
-			t.Error("Expected .camp/nix directory to be created")
-		}
-
-		flakePath := filepath.Join(nixDir, "flake.nix")
-		if _, err := os.Stat(flakePath); os.IsNotExist(err) {
-			t.Error("Expected flake.nix to be created")
-		}
-	})
+	output, err := executeCommand(rebuildCmd)
+	if err == nil || !strings.Contains(err.Error(), "rebuild failed") {
+		t.Errorf("Expected rebuild failure error, got: %v", err)
+	}
+	if strings.Contains(output, "completed successfully") {
+		t.Errorf("Expected no success message on failure, got:\n%s", output)
+	}
 }
 
 func TestRebuildCommandOutputFormat(t *testing.T) {
-	// Skip if template files don't exist
-	if _, err := os.Stat("templates/files"); os.IsNotExist(err) {
-		t.Skip("Skipping test: templates/files directory not found")
+	utilstest.StubExec(t)
+	stubCurrentUser(t, "linux", "env:\n  EDITOR: nvim\n")
+
+	output, err := executeCommand(rebuildCmd)
+	if err != nil {
+		t.Fatalf("rebuild returned error: %v", err)
 	}
-
-	// Create temporary home directory
-	tmpHome := t.TempDir()
-
-	// Create .camp directory and config
-	campDir := filepath.Join(tmpHome, ".camp")
-	if err := os.MkdirAll(campDir, 0755); err != nil {
-		t.Fatalf("Failed to create .camp directory: %v", err)
-	}
-
-	configPath := filepath.Join(campDir, "camp.yml")
-	configContent := `env:
-  EDITOR: nvim
-`
-	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
-		t.Fatalf("Failed to write config: %v", err)
-	}
-
-	// Save original HOME and restore after test
-	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-	os.Setenv("HOME", tmpHome)
-
-	// Create command with output buffer
-	var output bytes.Buffer
-
-	cmd := &cobra.Command{
-		Use:   rebuildCmd.Use,
-		Short: rebuildCmd.Short,
-		Long:  rebuildCmd.Long,
-		RunE:  rebuildCmd.RunE,
-	}
-
-	cmd.SetOut(&output)
-	cmd.SetArgs([]string{})
-
-	// Execute command
-	_ = cmd.Execute() // Ignore error as rebuild will likely fail
-
-	// Verify output format
-	outputStr := output.String()
 
 	expectedPhrases := []string{
 		"Starting environment rebuild",
-		"Platform:",
-		"User:",
-		"Hostname:",
+		"Platform: linux",
+		"User: testuser",
+		"Hostname: testhost",
 		"Preparing environment",
+		"Executing rebuild command",
 	}
 
 	for _, phrase := range expectedPhrases {
-		if !strings.Contains(outputStr, phrase) {
-			t.Errorf("Expected output to contain '%s', got:\n%s", phrase, outputStr)
+		if !strings.Contains(output, phrase) {
+			t.Errorf("Expected output to contain '%s', got:\n%s", phrase, output)
 		}
 	}
 }

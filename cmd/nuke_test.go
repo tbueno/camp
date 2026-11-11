@@ -2,8 +2,12 @@ package cmd
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"camp/internal/utils/utilstest"
 
 	"github.com/spf13/cobra"
 )
@@ -199,6 +203,83 @@ func TestNukeCommandOutputFormat(t *testing.T) {
 			}
 		}
 	})
+}
+
+// stubNuke skips the confirmation prompt and reports nix as installed or not
+func stubNuke(t *testing.T, nixInstalled bool) {
+	t.Helper()
+
+	originalChecker := nixInstalledChecker
+	originalSkip := skipConfirmation
+	nixInstalledChecker = func() bool { return nixInstalled }
+	skipConfirmation = true
+	t.Cleanup(func() {
+		nixInstalledChecker = originalChecker
+		skipConfirmation = originalSkip
+	})
+}
+
+func TestNukeCommandExecution(t *testing.T) {
+	t.Run("uninstalls nix and removes camp files", func(t *testing.T) {
+		exec := utilstest.StubExec(t)
+		stubNuke(t, true)
+		user := stubCurrentUser(t, "linux", "env:\n  EDITOR: nvim\n")
+
+		output, err := executeCommand(nukeCmd)
+		if err != nil {
+			t.Fatalf("nuke returned error: %v", err)
+		}
+
+		if !exec.Called("/nix/nix-installer", "uninstall") {
+			t.Errorf("Expected nix-installer uninstall to run, got:\n%s", exec)
+		}
+		if _, err := os.Stat(filepath.Join(user.HomeDir, ".camp")); !os.IsNotExist(err) {
+			t.Error("Expected ~/.camp to be removed")
+		}
+		if !strings.Contains(output, "Your camp environment was erased") {
+			t.Errorf("Expected success message, got:\n%s", output)
+		}
+	})
+
+	t.Run("cleans up leftover files when nix is not installed", func(t *testing.T) {
+		exec := utilstest.StubExec(t)
+		stubNuke(t, false)
+		user := stubCurrentUser(t, "linux", "env:\n  EDITOR: nvim\n")
+
+		output, err := executeCommand(nukeCmd)
+		if err != nil {
+			t.Fatalf("nuke should succeed without nix, got: %v", err)
+		}
+
+		if len(exec.Calls) != 0 {
+			t.Errorf("Expected no uninstall commands without nix, ran:\n%s", exec)
+		}
+		if _, err := os.Stat(filepath.Join(user.HomeDir, ".camp")); !os.IsNotExist(err) {
+			t.Error("Expected ~/.camp to be removed")
+		}
+		if !strings.Contains(output, "Nix is not installed, skipping Nix uninstall") {
+			t.Errorf("Expected output to mention skipping the uninstall, got:\n%s", output)
+		}
+	})
+}
+
+func TestNukeCommandConfirmation_OmitsNixWhenNotInstalled(t *testing.T) {
+	originalChecker := nixInstalledChecker
+	nixInstalledChecker = func() bool { return false }
+	t.Cleanup(func() { nixInstalledChecker = originalChecker })
+
+	var output bytes.Buffer
+	cmd := &cobra.Command{Use: nukeCmd.Use, RunE: nukeCmd.RunE}
+	cmd.SetOut(&output)
+	cmd.SetIn(strings.NewReader("n\n"))
+	cmd.SetArgs([]string{})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Expected no error when user cancels, got: %v", err)
+	}
+	if strings.Contains(output.String(), "Nix package manager") {
+		t.Errorf("Expected the prompt not to list Nix when it is not installed, got:\n%s", output.String())
+	}
 }
 
 func TestIsNixInstalled(t *testing.T) {

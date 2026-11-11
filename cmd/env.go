@@ -10,6 +10,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// currentUser resolves the user the env commands act on. Tests replace it so they never
+// touch the real home directory.
+var currentUser = system.NewUser
+
 var envCmd = &cobra.Command{
 	Use:   "env",
 	Short: "Display development environment information",
